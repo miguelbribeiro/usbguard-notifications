@@ -4,9 +4,10 @@ use zbus::Connection;
 use zbus_macros::proxy;
 
 #[proxy(
-default_service = "org.usbguard1",
-default_path = "/org/usbguard1/Devices",
-interface = "org.usbguard.Devices1"
+    default_service = "org.usbguard1",
+    default_path = "/org/usbguard1/Devices",
+    interface = "org.usbguard.Devices1",
+    gen_blocking = false
 )]
 trait UsbGuard1Devices {
     #[zbus(signal)]
