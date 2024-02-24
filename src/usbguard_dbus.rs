@@ -1,34 +1,125 @@
+use crate::usbguard::DevicePresenceUpdate;
+use serde::Deserialize;
 use std::collections::HashMap;
 use zbus::export::futures_util::StreamExt;
-use zbus::Connection;
-use zbus_macros::proxy;
+use zbus::proxy::SignalStream;
+use zbus::{Connection, Message, Proxy};
+use zvariant::Type;
 
-#[proxy(
-    default_service = "org.usbguard1",
-    default_path = "/org/usbguard1/Devices",
-    interface = "org.usbguard.Devices1",
-    gen_blocking = false
-)]
-trait UsbGuard1Devices {
-    #[zbus(signal)]
-    fn device_presence_changed(
-        &self,
-        id: u32,
-        b: u32,
-        c: u32,
-        d: String,
-        e: HashMap<&str, &str>,
-    ) -> zbus::Result<()>;
+const USBGUARD_DBUS_DESTINATION: &'static str = "org.usbguard1";
+const USBGUARD_DBUS_OBJECT: &'static str = "/org/usbguard1/Devices";
+const USBGUARD_DBUS_INTERFACE: &'static str = "org.usbguard.Devices1";
+const USBGUARD_DBUS_INTERFACE_MEMBER: &'static str = "DevicePresenceChanged";
+
+#[derive(Debug)]
+struct UsbGuardDevicesProxy<'a>(Proxy<'a>);
+
+impl<'a> From<Proxy<'a>> for UsbGuardDevicesProxy<'a> {
+    fn from(proxy: Proxy<'a>) -> Self {
+        UsbGuardDevicesProxy(::std::convert::Into::into(proxy))
+    }
 }
 
-async fn watch_device_changes(connection: Connection) -> zbus::Result<()> {
-    let usbguard_proxy = UsbGuard1DevicesProxy::new(&connection).await?;
-    let mut new_jobs_stream = usbguard_proxy.receive_device_presence_changed().await?;
+impl<'a> zbus::proxy::ProxyDefault for UsbGuardDevicesProxy<'a> {
+    const INTERFACE: Option<&'static str> = Some(USBGUARD_DBUS_INTERFACE);
+    const DESTINATION: Option<&'static str> = Some(USBGUARD_DBUS_DESTINATION);
+    const PATH: Option<&'static str> = Some(USBGUARD_DBUS_OBJECT);
+}
 
-    while let Some(msg) = new_jobs_stream.next().await {
-        let args: DevicePresenceChangedArgs = msg.args().expect("Error parsing message");
+impl<'a> UsbGuardDevicesProxy<'a> {
+    async fn new(connection: &Connection) -> zbus::Result<Self> {
+        zbus::proxy::Builder::new(connection)
+            .cache_properties(zbus::CacheProperties::No)
+            .build()
+            .await
+    }
 
-        dbg!(args);
+    async fn receive_device_presence_changed(&self) -> zbus::Result<SignalStream> {
+        self.0.receive_signal("DevicePresenceChanged").await
+    }
+}
+
+enum MessageError {
+    WrongMessage,
+    Zbus(zbus::Error),
+}
+
+#[derive(Debug, Deserialize, Type)]
+struct DevicePresenceUpdateInternal {
+    id: u32,
+    event: u32,
+    c: u32,
+    // idk what this is tbh
+    rule: String,
+    attributes: HashMap<String, String>,
+}
+
+impl TryFrom<Message> for DevicePresenceUpdateInternal {
+    type Error = MessageError;
+
+    fn try_from(message: Message) -> Result<Self, Self::Error> {
+        let hdr = message.header();
+        let message_type = message.message_type();
+        let interface = hdr.interface();
+        let member = hdr.member();
+        let interface = interface.as_ref().map(|i| i.as_str());
+        let member = member.as_ref().map(|m| m.as_str());
+
+        match (message_type, interface, member) {
+            (
+                zbus::message::Type::Signal,
+                Some(USBGUARD_DBUS_INTERFACE),
+                Some(USBGUARD_DBUS_INTERFACE_MEMBER),
+            ) => message
+                .body()
+                .deserialize::<DevicePresenceUpdateInternal>()
+                .map_err(|error| MessageError::Zbus(error)),
+            _ => Err(MessageError::WrongMessage),
+        }
+    }
+}
+
+impl TryFrom<DevicePresenceUpdateInternal> for DevicePresenceUpdate {
+    type Error = &'static str;
+
+    /// Only fails if an attribute was missing.
+    fn try_from(mut value: DevicePresenceUpdateInternal) -> Result<Self, Self::Error> {
+        let name = value.attributes.remove("name").ok_or("name")?;
+
+        Ok(DevicePresenceUpdate::new(
+            value.id,
+            value.event.into(),
+            value.rule,
+            name,
+        ))
+    }
+}
+
+pub async fn watch_device_changes(
+    connection: Connection,
+    sender: tokio::sync::mpsc::Sender<DevicePresenceUpdate>,
+) -> zbus::Result<()> {
+    let usbguard_proxy = UsbGuardDevicesProxy::new(&connection).await?;
+    let mut update_stream = usbguard_proxy.receive_device_presence_changed().await?;
+
+    while let Some(message) = update_stream.next().await {
+        let update: DevicePresenceUpdateInternal = match message.try_into() {
+            Ok(message) => message,
+            Err(error) => match error {
+                MessageError::WrongMessage => continue,
+                MessageError::Zbus(error) => return Err(error),
+            },
+        };
+
+        let update: DevicePresenceUpdate = match update.try_into() {
+            Ok(update) => update,
+            Err(error) => {
+                eprintln!("Failed to convert: {}", error);
+                continue;
+            }
+        };
+
+        sender.send(update).await.unwrap();
     }
 
     panic!("Stream ended unexpectedly");
