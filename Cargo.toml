@@ -1,5 +1,5 @@
 [package]
-name = "zbus_test"
+name = "usbguard-notifications"
 version = "0.1.0"
 edition = "2021"
 

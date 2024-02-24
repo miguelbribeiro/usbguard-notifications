@@ -1,4 +1,4 @@
-use zbus_test::run;
+use usbguard_notifications::run;
 
 #[tokio::main]
 async fn main() {
