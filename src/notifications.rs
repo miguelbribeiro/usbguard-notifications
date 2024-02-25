@@ -1,44 +1,31 @@
 use std::collections::HashMap;
-use std::error::Error;
 
-use zbus::{proxy, zvariant::Value, Connection};
+use zbus::{zvariant::Value, Connection, Proxy};
 
-#[proxy(
-    default_service = "org.freedesktop.Notifications",
-    default_path = "/org/freedesktop/Notifications"
-)]
-trait Notifications {
-    /// Call the org.freedesktop.Notifications.Notify D-Bus method
-    fn notify(
-        &self,
-        app_name: &str,
-        replaces_id: u32,
-        app_icon: &str,
-        summary: &str,
-        body: &str,
-        actions: &[&str],
-        hints: HashMap<&str, &Value<'_>>,
-        expire_timeout: i32,
-    ) -> zbus::Result<u32>;
+#[derive(Debug, Clone, Copy)]
+pub enum Action {
+    Allow,
+    Block,
+    None,
 }
 
-pub async fn send_notification(text: &str) -> Result<(), Box<dyn Error>> {
+async fn send_internal(connection: &Connection) -> anyhow::Result<u32> {
+    let m = connection.call_method(
+        Some("org.freedesktop.Notifications"),
+        "/org/freedesktop/Notifications",
+        Some("org.freedesktop.Notifications"),
+        "Notify",
+        &("my-app", 0u32, "dialog-information", "A summary", "Some body",
+          vec![""; 0], HashMap::<&str, &Value>::new(), 5000),
+    ).await?;
+    
+    m.body().deserialize().map_err(|error| error.into())
+}
+
+pub async fn send_notification(text: &str) -> anyhow::Result<Action> {
     let connection = Connection::session().await?;
-
-    let proxy = NotificationsProxy::new(&connection).await?;
-    let reply = proxy
-        .notify(
-            "my-app",
-            0,
-            "dialog-information",
-            "A summary",
-            text,
-            &["Action1", "Text", "Action2", "Text2"],
-            HashMap::new(),
-            50000,
-        )
-        .await?;
-    dbg!(reply);
-
-    Ok(())
+    let proxy: Proxy = zbus::proxy::Builder::new(&connection).build().await?;
+    
+    
+    Ok(Action::None)
 }

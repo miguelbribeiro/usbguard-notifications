@@ -103,13 +103,16 @@ pub struct DbusDeviceManager {
 impl DbusDeviceManager {
     pub async fn new() -> zbus::Result<Self> {
         Ok(Self {
-            connection: Connection::system().await?
+            connection: Connection::system().await?,
         })
     }
 }
 
 impl DeviceManager for DbusDeviceManager {
-    async fn watch_device_changes(&self, sender: Sender<DevicePresenceUpdate>) -> anyhow::Result<()> {
+    async fn watch_device_changes(
+        &self,
+        sender: Sender<DevicePresenceUpdate>,
+    ) -> anyhow::Result<()> {
         let usbguard_proxy = UsbGuardDevicesProxy::new(&self.connection).await?;
         let mut update_stream = usbguard_proxy.receive_device_presence_changed().await?;
 

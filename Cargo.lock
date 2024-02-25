@@ -1022,7 +1022,6 @@ dependencies = [
  "serde",
  "tokio",
  "zbus",
- "zbus_macros",
  "zvariant",
 ]
 
