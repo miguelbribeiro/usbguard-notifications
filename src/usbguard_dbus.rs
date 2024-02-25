@@ -1,6 +1,7 @@
-use crate::usbguard::DevicePresenceUpdate;
+use crate::usbguard::{DeviceManager, DevicePresenceUpdate};
 use serde::Deserialize;
 use std::collections::HashMap;
+use tokio::sync::mpsc::Sender;
 use zbus::export::futures_util::StreamExt;
 use zbus::proxy::SignalStream;
 use zbus::{Connection, Message, Proxy};
@@ -95,32 +96,43 @@ impl TryFrom<DevicePresenceUpdateInternal> for DevicePresenceUpdate {
     }
 }
 
-pub async fn watch_device_changes(
+pub struct DbusDeviceManager {
     connection: Connection,
-    sender: tokio::sync::mpsc::Sender<DevicePresenceUpdate>,
-) -> zbus::Result<()> {
-    let usbguard_proxy = UsbGuardDevicesProxy::new(&connection).await?;
-    let mut update_stream = usbguard_proxy.receive_device_presence_changed().await?;
+}
 
-    while let Some(message) = update_stream.next().await {
-        let update: DevicePresenceUpdateInternal = match message.try_into() {
-            Ok(message) => message,
-            Err(error) => match error {
-                MessageError::WrongMessage => continue,
-                MessageError::Zbus(error) => return Err(error),
-            },
-        };
-
-        let update: DevicePresenceUpdate = match update.try_into() {
-            Ok(update) => update,
-            Err(error) => {
-                eprintln!("Failed to convert: {}", error);
-                continue;
-            }
-        };
-
-        sender.send(update).await.unwrap();
+impl DbusDeviceManager {
+    pub async fn new() -> zbus::Result<Self> {
+        Ok(Self {
+            connection: Connection::system().await?
+        })
     }
+}
 
-    panic!("Stream ended unexpectedly");
+impl DeviceManager for DbusDeviceManager {
+    async fn watch_device_changes(&self, sender: Sender<DevicePresenceUpdate>) -> anyhow::Result<()> {
+        let usbguard_proxy = UsbGuardDevicesProxy::new(&self.connection).await?;
+        let mut update_stream = usbguard_proxy.receive_device_presence_changed().await?;
+
+        while let Some(message) = update_stream.next().await {
+            let update: DevicePresenceUpdateInternal = match message.try_into() {
+                Ok(message) => message,
+                Err(error) => match error {
+                    MessageError::WrongMessage => continue,
+                    MessageError::Zbus(error) => return Err(error.into()),
+                },
+            };
+
+            let update: DevicePresenceUpdate = match update.try_into() {
+                Ok(update) => update,
+                Err(error) => {
+                    eprintln!("Failed to convert: {}", error);
+                    continue;
+                }
+            };
+
+            sender.send(update).await.unwrap();
+        }
+
+        panic!("Stream ended unexpectedly");
+    }
 }

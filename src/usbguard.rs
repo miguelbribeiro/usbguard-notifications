@@ -73,3 +73,10 @@ impl DevicePresenceUpdate {
         }
     }
 }
+
+pub trait DeviceManager: Send {
+    fn watch_device_changes(
+        &self,
+        sender: tokio::sync::mpsc::Sender<DevicePresenceUpdate>,
+    ) -> impl std::future::Future<Output = anyhow::Result<()>> + Send;
+}
