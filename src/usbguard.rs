@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail};
+use anyhow::anyhow;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum DeviceEvent {
@@ -26,6 +26,17 @@ pub enum DeviceTarget {
     Allow,
     Block,
     Reject,
+}
+
+impl DeviceTarget {
+    pub fn parse(value: &str) -> Result<Self, ()> {
+        match value {
+            "allow" => Ok(DeviceTarget::Allow),
+            "block" => Ok(DeviceTarget::Block),
+            "reject" => Ok(DeviceTarget::Reject),
+            _ => Err(()),
+        }
+    }
 }
 
 impl From<DeviceTarget> for u32 {
@@ -78,13 +89,9 @@ impl DevicePresenceUpdate {
             .split_whitespace()
             .next()
             .ok_or_else(|| anyhow!("String is empty"))?;
-
-        Ok(match target {
-            "allow" => DeviceTarget::Allow,
-            "block" => DeviceTarget::Block,
-            "reject" => DeviceTarget::Reject,
-            _ => bail!("Invalid target for device: {}", target),
-        })
+        
+        DeviceTarget::parse(target)
+            .map_err(|_| anyhow!("Invalid target for device: {}", target))
     }
 }
 
