@@ -7,14 +7,6 @@ pub enum DeviceEvent {
     Other,
 }
 
-#[derive(Debug, PartialEq, Copy, Clone)]
-pub enum DeviceTarget {
-    Allow,
-    Block,
-    Reject,
-    Other,
-}
-
 impl From<u32> for DeviceEvent {
     fn from(value: u32) -> Self {
         match value {
@@ -23,6 +15,23 @@ impl From<u32> for DeviceEvent {
             2 => Self::Update,
             3 => Self::Remove,
             _ => Self::Other,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum DeviceTarget {
+    Allow,
+    Block,
+    Reject,
+}
+
+impl From<DeviceTarget> for u32 {
+    fn from(value: DeviceTarget) -> Self {
+        match value {
+            DeviceTarget::Allow => 0,
+            DeviceTarget::Block => 1,
+            DeviceTarget::Reject => 2,
         }
     }
 }
@@ -61,16 +70,15 @@ impl DevicePresenceUpdate {
         &self.name
     }
 
-    pub fn target(&self) -> DeviceTarget {
-        if self.rule.starts_with("block") {
-            DeviceTarget::Block
-        } else if self.rule.starts_with("allow") {
-            DeviceTarget::Allow
-        } else if self.rule.starts_with("reject") {
-            DeviceTarget::Reject
-        } else {
-            DeviceTarget::Other
-        }
+    pub fn target(&self) -> anyhow::Result<DeviceTarget> {
+        let target = self.rule.trim().split_ascii_whitespace().next()?;
+
+        Ok(match target {
+            "allow" => DeviceTarget::Allow,
+            "block" => DeviceTarget::Block,
+            "reject" => DeviceTarget::Reject,
+            _ => target.clone().into(), // TODO change
+        })
     }
 }
 
@@ -78,5 +86,9 @@ pub trait DeviceManager: Send {
     fn watch_device_changes(
         &self,
         sender: tokio::sync::mpsc::Sender<DevicePresenceUpdate>,
+    ) -> impl std::future::Future<Output = anyhow::Result<()>> + Send;
+    fn apply_device_target(
+        &self,
+        target: DeviceTarget,
     ) -> impl std::future::Future<Output = anyhow::Result<()>> + Send;
 }
