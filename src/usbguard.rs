@@ -1,3 +1,5 @@
+use anyhow::{anyhow, bail};
+
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum DeviceEvent {
     Present,
@@ -71,13 +73,17 @@ impl DevicePresenceUpdate {
     }
 
     pub fn target(&self) -> anyhow::Result<DeviceTarget> {
-        let target = self.rule.trim().split_ascii_whitespace().next()?;
+        let target = self
+            .rule
+            .split_whitespace()
+            .next()
+            .ok_or_else(|| anyhow!("String is empty"))?;
 
         Ok(match target {
             "allow" => DeviceTarget::Allow,
             "block" => DeviceTarget::Block,
             "reject" => DeviceTarget::Reject,
-            _ => target.clone().into(), // TODO change
+            _ => bail!("Invalid target for device: {}", target),
         })
     }
 }
