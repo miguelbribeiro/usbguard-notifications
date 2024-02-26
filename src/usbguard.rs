@@ -95,6 +95,7 @@ pub trait DeviceManager: Send {
     ) -> impl std::future::Future<Output = anyhow::Result<()>> + Send;
     fn apply_device_target(
         &self,
+        device_id: u32,
         target: DeviceTarget,
     ) -> impl std::future::Future<Output = anyhow::Result<()>> + Send;
 }
