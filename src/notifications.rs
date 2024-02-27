@@ -1,4 +1,3 @@
-use crate::usbguard::{DevicePresenceUpdate, DeviceTarget};
 use anyhow::bail;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -6,10 +5,15 @@ use std::time::Duration;
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::Sender;
 use tokio::time::Instant;
-use zbus::{zvariant::Value, Connection};
+use zbus::{zvariant::Value, Connection, Proxy, Message};
+use zbus::export::ordered_stream::OrderedStreamExt;
+use crate::usbguard::{DevicePresenceUpdate, DeviceTarget};
 
 const NOTIFICATION_ACTION_CHANNEL_SIZE: usize = 64;
 const NOTIFICATION_ACTION_TIMEOUT: Duration = Duration::from_secs(10);
+
+const DBUS_FREEDESKTOP_NOTIFICATIONS_INTERFACE: &str = "org.freedesktop.Notifications";
+const DBUS_FREEDESKTOP_NOTIFICATIONS_INTERFACE_MEMBER: &str = "ActionInvoked";
 
 #[derive(Debug, Clone)]
 struct NotificationAction {
@@ -17,6 +21,37 @@ struct NotificationAction {
     action: Arc<String>,
 }
 
+// TODO avoid duplicating all this code
+impl TryFrom<Message> for NotificationAction {
+    type Error = ();
+
+    fn try_from(message: Message) -> Result<Self, Self::Error> {
+        let hdr = message.header();
+        let message_type = message.message_type();
+        let interface = hdr.interface();
+        let member = hdr.member();
+        let interface = interface.as_ref().map(|i| i.as_str());
+        let member = member.as_ref().map(|m| m.as_str());
+
+        match (message_type, interface, member) {
+            (
+                zbus::message::Type::Signal,
+                Some(DBUS_FREEDESKTOP_NOTIFICATIONS_INTERFACE),
+                Some(DBUS_FREEDESKTOP_NOTIFICATIONS_INTERFACE_MEMBER),
+            ) => message
+                .body()
+                .deserialize::<(u32, String)>()
+                .map(|value| NotificationAction {
+                    notification_id: value.0,
+                    action: Arc::new(value.1),
+                })
+                .map_err(|_| ()),
+            _ => Err(()),
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct Notifications {
     connection: Connection,
     sender: Sender<NotificationAction>,
@@ -26,18 +61,31 @@ impl Notifications {
     pub async fn new() -> anyhow::Result<Self> {
         let connection = Connection::session().await?;
         let (sender, _) = broadcast::channel(NOTIFICATION_ACTION_CHANNEL_SIZE);
-        
+        let notifications = Notifications { connection, sender };
+
         // TODO unsure if the task should be spawned here
-        let sender_clone = sender.clone();
-        tokio::spawn(async move { 
-           Self::watcher(sender_clone).await;
+        let notifications_clone = notifications.clone();
+        tokio::spawn(async move {
+            notifications_clone.watcher().await.unwrap();
         });
 
-        Ok(Notifications { connection, sender })
+        Ok(notifications)
     }
 
-    async fn watcher(sender: Sender<NotificationAction>) {
-        todo!()
+    async fn watcher(&self) -> anyhow::Result<()> {
+        let proxy: Proxy = zbus::proxy::Builder::new(&self.connection).build().await?;
+        let mut stream = proxy.receive_signal(DBUS_FREEDESKTOP_NOTIFICATIONS_INTERFACE_MEMBER).await?;
+
+        while let Some(message) = stream.next().await {
+            let update: NotificationAction = match message.try_into() {
+                Ok(value) => value,
+                Err(_) => { continue; }, // TODO do something
+            };
+            
+            self.sender.send(update)?;
+        }
+
+        Ok(())
     }
 
     pub async fn ask_target_for_device_update(
