@@ -1,3 +1,4 @@
+use crate::usbguard::{DevicePresenceUpdate, DeviceTarget};
 use anyhow::bail;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -5,9 +6,8 @@ use std::time::Duration;
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::Sender;
 use tokio::time::Instant;
-use zbus::{zvariant::Value, Connection, Proxy, Message};
 use zbus::export::ordered_stream::OrderedStreamExt;
-use crate::usbguard::{DevicePresenceUpdate, DeviceTarget};
+use zbus::{zvariant::Value, Connection, Message, Proxy};
 
 const NOTIFICATION_ACTION_CHANNEL_SIZE: usize = 64;
 const NOTIFICATION_ACTION_TIMEOUT: Duration = Duration::from_secs(10);
@@ -139,12 +139,12 @@ impl Notifications {
                 &(
                     "usbguard-notifications",
                     0u32,
-                    "dialog-information",
+                    "",
                     "New device detected",
                     format!("Allow device \"{}\"?", device_name),
                     vec!["allow", "Allow", "block", "Block"],
                     HashMap::<&str, &Value>::new(),
-                    Duration::from_secs(10).as_millis() as u32,
+                    Duration::from_secs(10).as_millis() as i32,
                 ),
             )
             .await?
