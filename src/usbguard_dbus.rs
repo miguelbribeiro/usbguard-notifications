@@ -1,4 +1,4 @@
-use crate::usbguard::{DeviceManager, DevicePresenceUpdate};
+use crate::usbguard::{DeviceManager, DevicePresenceUpdate, DeviceTarget};
 use serde::Deserialize;
 use std::collections::HashMap;
 use tokio::sync::mpsc::Sender;
@@ -137,5 +137,9 @@ impl DeviceManager for DbusDeviceManager {
         }
 
         panic!("Stream ended unexpectedly");
+    }
+
+    async fn apply_device_target(&self, device_id: u32, target: DeviceTarget) -> anyhow::Result<()> {
+        todo!()
     }
 }

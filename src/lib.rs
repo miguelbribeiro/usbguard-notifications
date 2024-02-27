@@ -11,14 +11,18 @@ pub async fn run() {
     let manager = usbguard_dbus::DbusDeviceManager::new()
         .await
         .expect("should be able to connect to system bus");
+
+    let notifications = notifications::Notifications::new().await.unwrap();
+
     let mut receiver = subscribe_device_updates(manager).await;
-
-    notifications::send_notification("gm").await.unwrap();
-
     loop {
         let update = receiver.recv().await.unwrap();
-        println!("{}", update.rule());
-        dbg!(update);
+        let target = notifications
+            .ask_target_for_device_update(&update)
+            .await
+            .unwrap();
+
+        dbg!(target);
     }
 }
 
