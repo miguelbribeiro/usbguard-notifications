@@ -12,6 +12,8 @@ use crate::usbguard::{DevicePresenceUpdate, DeviceTarget};
 const NOTIFICATION_ACTION_CHANNEL_SIZE: usize = 64;
 const NOTIFICATION_ACTION_TIMEOUT: Duration = Duration::from_secs(10);
 
+const DBUS_FREEDESKTOP_NOTIFICATIONS_DESTINATION: &str = "org.freedesktop.Notifications";
+const DBUS_FREEDESKTOP_NOTIFICATIONS_OBJECT: &str = "/org/freedesktop/Notifications";
 const DBUS_FREEDESKTOP_NOTIFICATIONS_INTERFACE: &str = "org.freedesktop.Notifications";
 const DBUS_FREEDESKTOP_NOTIFICATIONS_INTERFACE_MEMBER: &str = "ActionInvoked";
 
@@ -73,15 +75,24 @@ impl Notifications {
     }
 
     async fn watcher(&self) -> anyhow::Result<()> {
-        let proxy: Proxy = zbus::proxy::Builder::new(&self.connection).build().await?;
-        let mut stream = proxy.receive_signal(DBUS_FREEDESKTOP_NOTIFICATIONS_INTERFACE_MEMBER).await?;
+        let proxy: Proxy = zbus::proxy::Builder::new(&self.connection)
+            .destination(DBUS_FREEDESKTOP_NOTIFICATIONS_DESTINATION)?
+            .path(DBUS_FREEDESKTOP_NOTIFICATIONS_OBJECT)?
+            .interface(DBUS_FREEDESKTOP_NOTIFICATIONS_INTERFACE)?
+            .cache_properties(zbus::CacheProperties::No)
+            .build()
+            .await?;
+
+        let mut stream = proxy
+            .receive_signal(DBUS_FREEDESKTOP_NOTIFICATIONS_INTERFACE_MEMBER)
+            .await?;
 
         while let Some(message) = stream.next().await {
             let update: NotificationAction = match message.try_into() {
                 Ok(value) => value,
                 Err(_) => { continue; }, // TODO do something
             };
-            
+
             self.sender.send(update)?;
         }
 
