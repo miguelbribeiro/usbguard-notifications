@@ -7,5 +7,7 @@ edition = "2021"
 anyhow = "1.0.80"
 serde = { version = "1.0.197", features = ["derive"] }
 tokio = { version = "1.36.0", features = ["full"] }
+tracing = "0.1.40"
+tracing-subscriber = "0.3.18"
 zbus = { version = "4.1.1", features = ["tokio"], default-features = false }
 zvariant = "4.0.1"
