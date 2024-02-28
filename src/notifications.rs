@@ -142,7 +142,7 @@ impl Notifications {
                     "",
                     "New device detected",
                     format!("Allow device \"{}\"?", device_name),
-                    vec!["allow", "Allow", "block", "Block"],
+                    vec!["block", "Block", "allow", "Allow"],
                     HashMap::<&str, &Value>::new(),
                     Duration::from_secs(10).as_millis() as i32,
                 ),
