@@ -10,7 +10,8 @@ use zvariant::Type;
 const USBGUARD_DBUS_DESTINATION: &'static str = "org.usbguard1";
 const USBGUARD_DBUS_OBJECT: &'static str = "/org/usbguard1/Devices";
 const USBGUARD_DBUS_INTERFACE: &'static str = "org.usbguard.Devices1";
-const USBGUARD_DBUS_INTERFACE_MEMBER: &'static str = "DevicePresenceChanged";
+const USBGUARD_DBUS_INTERFACE_PRESENCE_CHANGED: &'static str = "DevicePresenceChanged";
+const USBGUARD_DBUS_INTERFACE_APPLY_POLICY: &'static str = "applyDevicePolicy";
 
 #[derive(Debug)]
 struct UsbGuardDevicesProxy<'a>(Proxy<'a>);
@@ -70,7 +71,7 @@ impl TryFrom<Message> for DevicePresenceUpdateInternal {
             (
                 zbus::message::Type::Signal,
                 Some(USBGUARD_DBUS_INTERFACE),
-                Some(USBGUARD_DBUS_INTERFACE_MEMBER),
+                Some(USBGUARD_DBUS_INTERFACE_PRESENCE_CHANGED),
             ) => message
                 .body()
                 .deserialize::<DevicePresenceUpdateInternal>()
@@ -140,6 +141,25 @@ impl DeviceManager for DbusDeviceManager {
     }
 
     async fn apply_device_target(&self, device_id: u32, target: DeviceTarget) -> anyhow::Result<()> {
-        todo!()
+        let target: u32 = match target { 
+            DeviceTarget::Allow => 0,
+            DeviceTarget::Block => 1,
+            DeviceTarget::Reject => 2,
+        };
+        
+        // (id, target, permanent)
+        let body = (device_id, target, false);
+        
+        // TODO check return
+        self.connection
+            .call_method(
+                Some(USBGUARD_DBUS_DESTINATION),
+                USBGUARD_DBUS_OBJECT,
+                Some(USBGUARD_DBUS_INTERFACE),
+                USBGUARD_DBUS_INTERFACE_APPLY_POLICY,
+                &body,
+            ).await
+            .map(|_| ())
+            .map_err(|err| err.into())
     }
 }
