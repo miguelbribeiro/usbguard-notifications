@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use crate::usbguard::{DeviceManager, DevicePresenceUpdate};
 use tokio::sync::mpsc::Receiver;
 
@@ -8,26 +9,26 @@ mod usbguard_dbus;
 const CHANNEL_BUFFER_SIZE: usize = 64;
 
 pub async fn run() {
-    let manager = usbguard_dbus::DbusDeviceManager::new()
+    let manager = Arc::new(usbguard_dbus::DbusDeviceManager::new()
         .await
-        .expect("should be able to connect to system bus");
+        .expect("should be able to connect to system bus"));
 
     let notifications = notifications::Notifications::new().await.unwrap();
 
-    let mut receiver = subscribe_device_updates(manager).await;
+    let mut receiver = subscribe_device_updates(manager.clone()).await;
     loop {
         let update = receiver.recv().await.unwrap();
         let target = notifications
             .ask_target_for_device_update(&update)
             .await
-            .unwrap();
+            .unwrap(); // TODO don't unwrap
 
-        dbg!(target);
+        manager.apply_device_target(update.device_id(), target).await.unwrap();
     }
 }
 
-async fn subscribe_device_updates(
-    manager: impl DeviceManager + Send + 'static,
+async fn subscribe_device_updates<M: DeviceManager + Send + Sync + 'static>(
+    manager: Arc<M>,
 ) -> Receiver<DevicePresenceUpdate> {
     let (sender, receiver) = tokio::sync::mpsc::channel(CHANNEL_BUFFER_SIZE);
 
