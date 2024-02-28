@@ -27,12 +27,10 @@ pub async fn run() {
         // ignore this device
         match (
             update.event(),
-            update.target().unwrap_or(DeviceTarget::Block),
+            update.target().unwrap_or(DeviceTarget::Allow),
         ) {
             (DeviceEvent::Insert, DeviceTarget::Block) => {}
-            _ => {
-                continue;
-            }
+            _ => continue,
         };
 
         // clone Arcs
@@ -55,7 +53,9 @@ async fn query_user(
         Ok(target) => target,
         Err(error) => {
             match error.downcast_ref::<TimeoutError>() {
-                Some(_) => debug!("Time limit for receiving an action from the user has been exceeded"),
+                Some(_) => {
+                    debug!("Time limit for receiving an action from the user has been exceeded")
+                }
                 None => error!(
                     "Error while sending notification or getting its action back: {}",
                     &error
