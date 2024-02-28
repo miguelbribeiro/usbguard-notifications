@@ -29,12 +29,12 @@ pub enum DeviceTarget {
 }
 
 impl DeviceTarget {
-    pub fn parse(value: &str) -> Result<Self, ()> {
+    pub fn parse(value: &str) -> anyhow::Result<Self> {
         match value {
             "allow" => Ok(DeviceTarget::Allow),
             "block" => Ok(DeviceTarget::Block),
             "reject" => Ok(DeviceTarget::Reject),
-            _ => Err(()),
+            _ => Err(anyhow!("Failed to parse target from value \"{}\"", value)),
         }
     }
 }

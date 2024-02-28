@@ -118,7 +118,7 @@ impl Notifications {
                 .expect("this receiver shouldn't be falling behind");
 
             if notification_action.notification_id == notification_id {
-                return Ok(DeviceTarget::Block);
+                return DeviceTarget::parse(&notification_action.action);
             } else {
                 let elapsed = start.elapsed();
                 match time_remaining.checked_sub(elapsed) {
