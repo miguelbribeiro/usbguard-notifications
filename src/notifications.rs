@@ -90,7 +90,9 @@ impl Notifications {
         while let Some(message) = stream.next().await {
             let update: NotificationAction = match message.try_into() {
                 Ok(value) => value,
-                Err(_) => { continue; }, // TODO do something
+                Err(_) => {
+                    continue;
+                } // TODO do something
             };
 
             self.sender.send(update)?;

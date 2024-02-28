@@ -140,16 +140,20 @@ impl DeviceManager for DbusDeviceManager {
         panic!("Stream ended unexpectedly");
     }
 
-    async fn apply_device_target(&self, device_id: u32, target: DeviceTarget) -> anyhow::Result<()> {
-        let target: u32 = match target { 
+    async fn apply_device_target(
+        &self,
+        device_id: u32,
+        target: DeviceTarget,
+    ) -> anyhow::Result<()> {
+        let target: u32 = match target {
             DeviceTarget::Allow => 0,
             DeviceTarget::Block => 1,
             DeviceTarget::Reject => 2,
         };
-        
+
         // (id, target, permanent)
         let body = (device_id, target, false);
-        
+
         // TODO check return
         self.connection
             .call_method(
@@ -158,7 +162,8 @@ impl DeviceManager for DbusDeviceManager {
                 Some(USBGUARD_DBUS_INTERFACE),
                 USBGUARD_DBUS_INTERFACE_APPLY_POLICY,
                 &body,
-            ).await
+            )
+            .await
             .map(|_| ())
             .map_err(|err| err.into())
     }

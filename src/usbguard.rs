@@ -89,7 +89,7 @@ impl DevicePresenceUpdate {
             .split_whitespace()
             .next()
             .ok_or_else(|| anyhow!("String is empty"))?;
-        
+
         DeviceTarget::parse(target)
     }
 }
