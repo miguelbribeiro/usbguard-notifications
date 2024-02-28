@@ -91,7 +91,6 @@ impl DevicePresenceUpdate {
             .ok_or_else(|| anyhow!("String is empty"))?;
         
         DeviceTarget::parse(target)
-            .map_err(|_| anyhow!("Invalid target for device: {}", target))
     }
 }
 
