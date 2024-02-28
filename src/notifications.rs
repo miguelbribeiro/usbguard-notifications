@@ -144,7 +144,7 @@ impl Notifications {
                     format!("Allow device \"{}\"?", device_name),
                     vec!["block", "Block", "allow", "Allow"],
                     HashMap::<&str, &Value>::new(),
-                    Duration::from_secs(10).as_millis() as i32,
+                    NOTIFICATION_ACTION_TIMEOUT.as_millis() as i32,
                 ),
             )
             .await?
