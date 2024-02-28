@@ -1,6 +1,7 @@
 use crate::usbguard::{DeviceEvent, DeviceManager, DevicePresenceUpdate, DeviceTarget};
 use std::sync::Arc;
 use tokio::sync::mpsc::Receiver;
+use crate::notifications::TimeoutError;
 
 mod notifications;
 mod usbguard;
@@ -28,10 +29,21 @@ pub async fn run() {
             _ => { continue; }
         };
 
-        let target = notifications
+        let target = match notifications
             .ask_target_for_device_update(&update)
-            .await
-            .unwrap(); // TODO don't unwrap
+            .await {
+            Ok(target) => target,
+            Err(err) => match err.downcast::<TimeoutError>() {
+                Ok(_) => {
+                    eprintln!("Timeout exceeded!");
+                    continue;
+                }
+                Err(_) => {
+                    eprintln!("Other error!");
+                    continue;
+                }
+            }
+        };
 
         device_manager
             .apply_device_target(update.device_id(), target)

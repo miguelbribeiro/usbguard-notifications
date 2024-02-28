@@ -1,6 +1,6 @@
 use crate::usbguard::{DevicePresenceUpdate, DeviceTarget};
-use anyhow::bail;
 use std::collections::HashMap;
+use std::fmt::{Debug, Display, Formatter};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::broadcast;
@@ -16,6 +16,17 @@ const DBUS_FREEDESKTOP_NOTIFICATIONS_DESTINATION: &str = "org.freedesktop.Notifi
 const DBUS_FREEDESKTOP_NOTIFICATIONS_OBJECT: &str = "/org/freedesktop/Notifications";
 const DBUS_FREEDESKTOP_NOTIFICATIONS_INTERFACE: &str = "org.freedesktop.Notifications";
 const DBUS_FREEDESKTOP_NOTIFICATIONS_INTERFACE_MEMBER: &str = "ActionInvoked";
+
+#[derive(Debug)]
+pub struct TimeoutError;
+
+impl Display for TimeoutError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "timeout has been exceeded")
+    }
+}
+
+impl std::error::Error for TimeoutError {}
 
 #[derive(Debug, Clone)]
 struct NotificationAction {
@@ -116,7 +127,8 @@ impl Notifications {
 
             // this returns from the function if timeout was exceeded
             let notification_action = tokio::time::timeout(time_remaining, receiver.recv())
-                .await?
+                .await
+                .map_err(|_| TimeoutError)?
                 .expect("this receiver shouldn't be falling behind");
 
             if notification_action.notification_id == notification_id {
@@ -125,7 +137,7 @@ impl Notifications {
                 let elapsed = start.elapsed();
                 match time_remaining.checked_sub(elapsed) {
                     Some(value) => time_remaining = value,
-                    None => bail!("Timeout exceeded"),
+                    None => return Err(TimeoutError.into()),
                 }
             }
         }
