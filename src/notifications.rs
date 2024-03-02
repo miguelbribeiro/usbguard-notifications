@@ -144,6 +144,9 @@ impl Notifications {
     }
 
     async fn send_notification(&self, device_name: &str) -> anyhow::Result<u32> {
+        let mut hints = HashMap::new();
+        hints.insert("urgency", Value::U8(2)); // set urgency to critical
+        
         self.connection
             .call_method(
                 Some("org.freedesktop.Notifications"),
@@ -157,7 +160,7 @@ impl Notifications {
                     "New device detected",
                     format!("Allow device \"{}\"?", device_name),
                     vec!["block", "Block", "allow", "Allow"],
-                    HashMap::<&str, &Value>::new(),
+                    hints,
                     NOTIFICATION_ACTION_TIMEOUT.as_millis() as i32,
                 ),
             )
