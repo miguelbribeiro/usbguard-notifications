@@ -219,13 +219,13 @@ impl Notifications {
 }
 
 /// Returns the notification ID.
-async fn notify<'a>(
+async fn notify(
     connection: &Connection,
     app_name: &str,
     summary: &str,
     body: &str,
     actions: &[&str],
-    hints: &HashMap<&str, Value<'a>>,
+    hints: &HashMap<&str, Value<'_>>,
     timeout: Duration,
 ) -> anyhow::Result<u32> {
     let body = &(
