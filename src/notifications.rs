@@ -12,10 +12,10 @@ use zbus::{zvariant::Value, Connection, Message, Proxy};
 const NOTIFICATION_ACTION_CHANNEL_SIZE: usize = 64;
 const NOTIFICATION_ACTION_TIMEOUT: Duration = Duration::from_secs(10);
 
-const DBUS_FREEDESKTOP_NOTIFICATIONS_DESTINATION: &str = "org.freedesktop.Notifications";
-const DBUS_FREEDESKTOP_NOTIFICATIONS_OBJECT: &str = "/org/freedesktop/Notifications";
-const DBUS_FREEDESKTOP_NOTIFICATIONS_INTERFACE: &str = "org.freedesktop.Notifications";
-const DBUS_FREEDESKTOP_NOTIFICATIONS_INTERFACE_MEMBER: &str = "ActionInvoked";
+const DBUS_NOTIFICATIONS_DESTINATION: &str = "org.freedesktop.Notifications";
+const DBUS_NOTIFICATIONS_OBJECT: &str = "/org/freedesktop/Notifications";
+const DBUS_NOTIFICATIONS_INTERFACE: &str = "org.freedesktop.Notifications";
+const DBUS_NOTIFICATIONS_INTERFACE_ACTION_INVOKED: &str = "ActionInvoked";
 
 const ACTION_ALLOW: (&str, &str) = ("allow", "Allow");
 const ACTION_IGNORE: (&str, &str) = ("ignore", "Ignore");
@@ -52,8 +52,8 @@ impl TryFrom<Message> for NotificationAction {
         match (message_type, interface, member) {
             (
                 zbus::message::Type::Signal,
-                Some(DBUS_FREEDESKTOP_NOTIFICATIONS_INTERFACE),
-                Some(DBUS_FREEDESKTOP_NOTIFICATIONS_INTERFACE_MEMBER),
+                Some(DBUS_NOTIFICATIONS_INTERFACE),
+                Some(DBUS_NOTIFICATIONS_INTERFACE_ACTION_INVOKED),
             ) => message
                 .body()
                 .deserialize::<(u32, String)>()
@@ -90,15 +90,15 @@ impl Notifications {
 
     async fn watcher(&self) -> anyhow::Result<()> {
         let proxy: Proxy = zbus::proxy::Builder::new(&self.connection)
-            .destination(DBUS_FREEDESKTOP_NOTIFICATIONS_DESTINATION)?
-            .path(DBUS_FREEDESKTOP_NOTIFICATIONS_OBJECT)?
-            .interface(DBUS_FREEDESKTOP_NOTIFICATIONS_INTERFACE)?
+            .destination(DBUS_NOTIFICATIONS_DESTINATION)?
+            .path(DBUS_NOTIFICATIONS_OBJECT)?
+            .interface(DBUS_NOTIFICATIONS_INTERFACE)?
             .cache_properties(zbus::CacheProperties::No)
             .build()
             .await?;
 
         let mut stream = proxy
-            .receive_signal(DBUS_FREEDESKTOP_NOTIFICATIONS_INTERFACE_MEMBER)
+            .receive_signal(DBUS_NOTIFICATIONS_INTERFACE_ACTION_INVOKED)
             .await?;
 
         while let Some(message) = stream.next().await {
