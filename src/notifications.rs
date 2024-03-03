@@ -177,9 +177,6 @@ impl Notifications {
         // 2. the notification expires or the user closes it
         // 3. the USB device associated with the notification is removed
 
-        let sleep = tokio::time::sleep(NOTIFICATION_ACTION_TIMEOUT);
-        tokio::pin!(sleep);
-
         // TODO check if the USB device is removed
         tokio::select! {
             signal = self.get_next_signal(notification_id, receiver) => {
@@ -188,10 +185,6 @@ impl Notifications {
                     NotificationSignal::Closed(_) => Err(anyhow!("notification closed or expired")),
                 }
             },
-            () = &mut sleep => {
-                // TODO try to remove notification
-                Err(TimeoutError.into())
-            }
         }
     }
 
