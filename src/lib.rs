@@ -3,7 +3,7 @@ use crate::notifications::TimeoutError;
 use crate::usbguard::{DeviceEvent, DeviceManager, DevicePresenceUpdate, DeviceTarget};
 use std::sync::Arc;
 use tokio::sync::mpsc::Receiver;
-use tracing::{debug, error, instrument, Level};
+use tracing::{debug, error, instrument, Level, warn};
 
 mod notifications;
 mod usbguard;
@@ -56,7 +56,7 @@ async fn query_user(
                 Some(_) => {
                     debug!("Time limit for receiving an action from the user has been exceeded")
                 }
-                None => error!(
+                None => warn!(
                     "Error while sending notification or getting its action back: {}",
                     &error
                 ),
@@ -65,9 +65,9 @@ async fn query_user(
             return Err(error);
         }
     };
-    
-    debug!("Query result: should allow: {}", allow);
-    
+
+    debug!("Notification result: should allow: {}", allow);
+
     if allow {
         manager
             .apply_device_target(update.device_id(), DeviceTarget::Allow)
