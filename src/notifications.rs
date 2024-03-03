@@ -1,9 +1,9 @@
 use crate::usbguard::DevicePresenceUpdate;
+use anyhow::anyhow;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::sync::Arc;
 use std::time::Duration;
-use anyhow::anyhow;
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::{Receiver, Sender};
 use tracing::error;
@@ -16,6 +16,7 @@ const NOTIFICATION_ACTION_TIMEOUT: Duration = Duration::from_secs(300);
 const DBUS_NOTIFICATIONS_DESTINATION: &str = "org.freedesktop.Notifications";
 const DBUS_NOTIFICATIONS_OBJECT: &str = "/org/freedesktop/Notifications";
 const DBUS_NOTIFICATIONS_INTERFACE: &str = "org.freedesktop.Notifications";
+const DBUS_NOTIFICATIONS_INTERFACE_NOTIFY: &str = "Notify";
 const DBUS_NOTIFICATIONS_INTERFACE_ACTION_INVOKED: &str = "ActionInvoked";
 const DBUS_NOTIFICATIONS_INTERFACE_CLOSED: &str = "NotificationClosed";
 
@@ -204,26 +205,50 @@ impl Notifications {
             ACTION_ALLOW.1,
         ];
 
-        self.connection
-            .call_method(
-                Some("org.freedesktop.Notifications"),
-                "/org/freedesktop/Notifications",
-                Some("org.freedesktop.Notifications"),
-                "Notify",
-                &(
-                    "usbguard-notifications",
-                    0u32,
-                    "",
-                    "New blocked USB device detected",
-                    format!("Allow device \"{}\"?", device_name),
-                    actions,
-                    hints,
-                    NOTIFICATION_ACTION_TIMEOUT.as_millis() as i32,
-                ),
-            )
-            .await?
-            .body()
-            .deserialize()
-            .map_err(|error| error.into())
+        notify(
+            &self.connection,
+            "usbguard-notifications",
+            "New blocked USB device detected",
+            format!("Allow device \"{}\"?", device_name).as_str(),
+            actions.as_slice(),
+            &hints,
+            NOTIFICATION_ACTION_TIMEOUT,
+        )
+        .await
     }
+}
+
+/// Returns the notification ID.
+async fn notify<'a>(
+    connection: &Connection,
+    app_name: &str,
+    summary: &str,
+    body: &str,
+    actions: &[&str],
+    hints: &HashMap<&str, Value<'a>>,
+    timeout: Duration,
+) -> anyhow::Result<u32> {
+    let body = &(
+        app_name,
+        0u32,
+        "",
+        summary,
+        body,
+        actions,
+        hints,
+        timeout.as_secs() as i32,
+    );
+
+    connection
+        .call_method(
+            Some(DBUS_NOTIFICATIONS_DESTINATION),
+            DBUS_NOTIFICATIONS_OBJECT,
+            Some(DBUS_NOTIFICATIONS_INTERFACE),
+            DBUS_NOTIFICATIONS_INTERFACE_NOTIFY,
+            &body,
+        )
+        .await?
+        .body()
+        .deserialize()
+        .map_err(|error| error.into())
 }
