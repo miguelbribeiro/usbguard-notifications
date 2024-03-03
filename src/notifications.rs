@@ -181,18 +181,16 @@ impl Notifications {
         // TODO check if the USB device is removed
         tokio::select! {
             signal = self.get_next_signal(notification_id, receiver) => {
-                return match signal {
+                match signal {
                     NotificationSignal::ActionInvoked(signal) => Ok(signal.action.as_str() == ACTION_ALLOW.0),
                     NotificationSignal::Closed(_) => Err(anyhow!("notification closed or expired")),
-                };
+                }
             },
             () = &mut sleep => {
                 // TODO try to remove notification
-                return Err(TimeoutError.into());
+                Err(TimeoutError.into())
             }
-        };
-
-        Ok(true)
+        }
     }
 
     async fn send_notification(&self, device_name: &str) -> anyhow::Result<u32> {
