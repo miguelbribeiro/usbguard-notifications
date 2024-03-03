@@ -1,9 +1,11 @@
+#![allow(dead_code)]
+
 use crate::notifications::Notifications;
 use crate::notifications::TimeoutError;
 use crate::usbguard::{DeviceEvent, DeviceManager, DevicePresenceUpdate, DeviceTarget};
 use std::sync::Arc;
 use tokio::sync::mpsc::Receiver;
-use tracing::{debug, error, instrument, Level, warn};
+use tracing::{debug, error, instrument, warn};
 
 mod notifications;
 mod usbguard;
