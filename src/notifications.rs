@@ -17,6 +17,7 @@ const DBUS_NOTIFICATIONS_DESTINATION: &str = "org.freedesktop.Notifications";
 const DBUS_NOTIFICATIONS_OBJECT: &str = "/org/freedesktop/Notifications";
 const DBUS_NOTIFICATIONS_INTERFACE: &str = "org.freedesktop.Notifications";
 const DBUS_NOTIFICATIONS_INTERFACE_NOTIFY: &str = "Notify";
+const DBUS_NOTIFICATIONS_INTERFACE_CLOSE: &str = "CloseNotification";
 const DBUS_NOTIFICATIONS_INTERFACE_ACTION_INVOKED: &str = "ActionInvoked";
 const DBUS_NOTIFICATIONS_INTERFACE_CLOSED: &str = "NotificationClosed";
 
@@ -245,6 +246,23 @@ async fn notify(
             DBUS_NOTIFICATIONS_OBJECT,
             Some(DBUS_NOTIFICATIONS_INTERFACE),
             DBUS_NOTIFICATIONS_INTERFACE_NOTIFY,
+            &body,
+        )
+        .await?
+        .body()
+        .deserialize()
+        .map_err(|error| error.into())
+}
+
+async fn close_notification(connection: &Connection, notification_id: u32) -> anyhow::Result<()> {
+    let body = (notification_id,);
+
+    connection
+        .call_method(
+            Some(DBUS_NOTIFICATIONS_DESTINATION),
+            DBUS_NOTIFICATIONS_OBJECT,
+            Some(DBUS_NOTIFICATIONS_INTERFACE),
+            DBUS_NOTIFICATIONS_INTERFACE_CLOSE,
             &body,
         )
         .await?
