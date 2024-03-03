@@ -1,4 +1,4 @@
-use crate::usbguard::{DevicePresenceUpdate, DeviceTarget};
+use crate::usbguard::DevicePresenceUpdate;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::sync::Arc;
@@ -16,6 +16,9 @@ const DBUS_FREEDESKTOP_NOTIFICATIONS_DESTINATION: &str = "org.freedesktop.Notifi
 const DBUS_FREEDESKTOP_NOTIFICATIONS_OBJECT: &str = "/org/freedesktop/Notifications";
 const DBUS_FREEDESKTOP_NOTIFICATIONS_INTERFACE: &str = "org.freedesktop.Notifications";
 const DBUS_FREEDESKTOP_NOTIFICATIONS_INTERFACE_MEMBER: &str = "ActionInvoked";
+
+const ACTION_ALLOW: (&str, &str) = ("allow", "Allow");
+const ACTION_IGNORE: (&str, &str) = ("ignore", "Ignore");
 
 #[derive(Debug)]
 pub struct TimeoutError;
@@ -112,10 +115,10 @@ impl Notifications {
         Ok(())
     }
 
-    pub async fn ask_target_for_device_update(
+    pub async fn ask_allow_device(
         &self,
         update: &DevicePresenceUpdate,
-    ) -> anyhow::Result<DeviceTarget> {
+    ) -> anyhow::Result<bool> {
         // subscription should be made before sending the notification to ensure no messages are missed
         let mut receiver = self.sender.subscribe();
 
@@ -132,7 +135,7 @@ impl Notifications {
                 .expect("this receiver shouldn't be falling behind");
 
             if notification_action.notification_id == notification_id {
-                return DeviceTarget::parse(&notification_action.action);
+                return Ok(notification_action.action.as_str() == ACTION_ALLOW.0);
             } else {
                 let elapsed = start.elapsed();
                 match time_remaining.checked_sub(elapsed) {
@@ -147,6 +150,8 @@ impl Notifications {
         let mut hints = HashMap::new();
         hints.insert("urgency", Value::U8(2)); // set urgency to critical
         
+        let actions = vec![ACTION_IGNORE.0, ACTION_IGNORE.1, ACTION_ALLOW.0, ACTION_ALLOW.1];
+        
         self.connection
             .call_method(
                 Some("org.freedesktop.Notifications"),
@@ -157,9 +162,9 @@ impl Notifications {
                     "usbguard-notifications",
                     0u32,
                     "",
-                    "New device detected",
+                    "New blocked USB device detected",
                     format!("Allow device \"{}\"?", device_name),
-                    vec!["block", "Block", "allow", "Allow"],
+                    actions,
                     hints,
                     NOTIFICATION_ACTION_TIMEOUT.as_millis() as i32,
                 ),

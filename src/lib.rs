@@ -49,7 +49,7 @@ async fn query_user(
     notifications: &Notifications,
     manager: &impl DeviceManager,
 ) -> anyhow::Result<()> {
-    let target = match notifications.ask_target_for_device_update(update).await {
+    let allow = match notifications.ask_allow_device(update).await {
         Ok(target) => target,
         Err(error) => {
             match error.downcast_ref::<TimeoutError>() {
@@ -65,11 +65,15 @@ async fn query_user(
             return Err(error);
         }
     };
-
-    manager
-        .apply_device_target(update.device_id(), target)
-        .await
-        .inspect_err(|error| error!("Couldn't apply new target to device: {}", error))?;
+    
+    debug!("Query result: should allow: {}", allow);
+    
+    if allow {
+        manager
+            .apply_device_target(update.device_id(), DeviceTarget::Allow)
+            .await
+            .inspect_err(|error| error!("Couldn't apply new target to device: {}", error))?;
+    }
 
     Ok(())
 }
