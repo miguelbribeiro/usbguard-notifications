@@ -12,7 +12,6 @@ use zbus::{zvariant::Value, Connection, Message, Proxy};
 
 const NOTIFICATION_APP_NAME: &str = "usbguard-notifications";
 const NOTIFICATION_ACTION_CHANNEL_SIZE: usize = 64;
-const NOTIFICATION_ACTION_TIMEOUT: Duration = Duration::from_secs(60 * 5);
 
 const DBUS_NOTIFICATIONS_DESTINATION: &str = "org.freedesktop.Notifications";
 const DBUS_NOTIFICATIONS_OBJECT: &str = "/org/freedesktop/Notifications";
@@ -192,7 +191,7 @@ impl Notifications {
         &self,
         summary: &str,
         body: &str,
-        timeout: Duration,
+        timeout: Option<Duration>,
     ) -> anyhow::Result<u32> {
         notify(
             &self.connection,
@@ -222,7 +221,7 @@ impl Notifications {
             format!("Allow device \"{}\"?", device_name).as_str(),
             actions.as_slice(),
             &hints,
-            NOTIFICATION_ACTION_TIMEOUT,
+            None,
         )
         .await
     }
@@ -235,8 +234,13 @@ async fn notify(
     body: &str,
     actions: &[&str],
     hints: &HashMap<&str, Value<'_>>,
-    timeout: Duration,
+    timeout: Option<Duration>,
 ) -> anyhow::Result<u32> {
+    let duration = match timeout {
+        Some(duration) => duration.as_secs() as i32,
+        None => -1,
+    };
+
     let body = &(
         NOTIFICATION_APP_NAME,
         0u32,
@@ -245,7 +249,7 @@ async fn notify(
         body,
         actions,
         hints,
-        timeout.as_secs() as i32,
+        duration,
     );
 
     connection
