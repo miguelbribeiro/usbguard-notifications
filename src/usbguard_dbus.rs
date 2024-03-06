@@ -1,7 +1,8 @@
 use crate::usbguard::{DeviceManager, DevicePresenceUpdate, DeviceTarget};
 use serde::Deserialize;
 use std::collections::HashMap;
-use tokio::sync::mpsc::Sender;
+use std::sync::Arc;
+use tokio::sync::broadcast::{Receiver, Sender};
 use zbus::export::futures_util::StreamExt;
 use zbus::proxy::SignalStream;
 use zbus::{Connection, Message, Proxy};
@@ -12,6 +13,8 @@ const USBGUARD_DBUS_OBJECT: &'static str = "/org/usbguard1/Devices";
 const USBGUARD_DBUS_INTERFACE: &'static str = "org.usbguard.Devices1";
 const USBGUARD_DBUS_INTERFACE_PRESENCE_CHANGED: &'static str = "DevicePresenceChanged";
 const USBGUARD_DBUS_INTERFACE_APPLY_POLICY: &'static str = "applyDevicePolicy";
+
+const CHANNEL_LIMIT: usize = 64;
 
 #[derive(Debug)]
 struct UsbGuardDevicesProxy<'a>(Proxy<'a>);
@@ -50,8 +53,8 @@ enum MessageError {
 struct DevicePresenceUpdateInternal {
     id: u32,
     event: u32,
-    c: u32,
     // idk what this is tbh
+    c: u32,
     rule: String,
     attributes: HashMap<String, String>,
 }
@@ -99,21 +102,22 @@ impl TryFrom<DevicePresenceUpdateInternal> for DevicePresenceUpdate {
 
 pub struct DbusDeviceManager {
     connection: Connection,
+    channel: Sender<Arc<DevicePresenceUpdate>>,
 }
 
 impl DbusDeviceManager {
     pub async fn new() -> zbus::Result<Self> {
+        let (sender, _) = tokio::sync::broadcast::channel(CHANNEL_LIMIT);
+
         Ok(Self {
             connection: Connection::system().await?,
+            channel: sender,
         })
     }
 }
 
 impl DeviceManager for DbusDeviceManager {
-    async fn watch_device_changes(
-        &self,
-        sender: Sender<DevicePresenceUpdate>,
-    ) -> anyhow::Result<()> {
+    async fn watch_device_changes(&self) -> anyhow::Result<()> {
         let usbguard_proxy = UsbGuardDevicesProxy::new(&self.connection).await?;
         let mut update_stream = usbguard_proxy.receive_device_presence_changed().await?;
 
@@ -134,10 +138,14 @@ impl DeviceManager for DbusDeviceManager {
                 }
             };
 
-            sender.send(update).await.unwrap();
+            let _ = self.channel.send(Arc::new(update));
         }
 
         panic!("Stream ended unexpectedly");
+    }
+
+    fn subscribe_device_changes(&self) -> anyhow::Result<Receiver<Arc<DevicePresenceUpdate>>> {
+        Ok(self.channel.subscribe())
     }
 
     async fn apply_device_target(

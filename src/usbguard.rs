@@ -1,4 +1,5 @@
 use anyhow::anyhow;
+use std::sync::Arc;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum DeviceEvent {
@@ -95,10 +96,10 @@ impl DevicePresenceUpdate {
 }
 
 pub trait DeviceManager: Send {
-    fn watch_device_changes(
+    fn watch_device_changes(&self) -> impl std::future::Future<Output = anyhow::Result<()>> + Send;
+    fn subscribe_device_changes(
         &self,
-        sender: tokio::sync::mpsc::Sender<DevicePresenceUpdate>,
-    ) -> impl std::future::Future<Output = anyhow::Result<()>> + Send;
+    ) -> anyhow::Result<tokio::sync::broadcast::Receiver<Arc<DevicePresenceUpdate>>>;
     fn apply_device_target(
         &self,
         device_id: u32,

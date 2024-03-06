@@ -4,7 +4,6 @@ use crate::notifications::Notifications;
 use crate::notifications::TimeoutError;
 use crate::usbguard::{DeviceEvent, DeviceManager, DevicePresenceUpdate, DeviceTarget};
 use std::sync::Arc;
-use tokio::sync::mpsc::Receiver;
 use tracing::{debug, error, instrument, warn};
 
 mod notifications;
@@ -21,7 +20,14 @@ pub async fn run() {
             .expect("should be able to connect to system bus"),
     );
 
-    let mut receiver = subscribe_device_updates(device_manager.clone()).await;
+    {
+        let device_manager = device_manager.clone();
+        tokio::spawn(async move {
+            device_manager.watch_device_changes().await.unwrap();
+        });
+    }
+
+    let mut receiver = device_manager.subscribe_device_changes().unwrap();
     loop {
         let update = receiver.recv().await.unwrap();
 
@@ -78,16 +84,4 @@ async fn query_user(
     }
 
     Ok(())
-}
-
-async fn subscribe_device_updates<M: DeviceManager + Send + Sync + 'static>(
-    manager: Arc<M>,
-) -> Receiver<DevicePresenceUpdate> {
-    let (sender, receiver) = tokio::sync::mpsc::channel(CHANNEL_BUFFER_SIZE);
-
-    tokio::spawn(async move {
-        manager.watch_device_changes(sender).await.unwrap();
-    });
-
-    receiver
 }
