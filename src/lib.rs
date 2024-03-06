@@ -72,10 +72,23 @@ async fn query_user(
     debug!("Notification result: should allow: {}", allow);
 
     if allow {
-        manager
+        let result = manager
             .apply_device_target(update.device_id(), DeviceTarget::Allow)
             .await
-            .inspect_err(|error| error!("Couldn't apply new target to device: {}", error))?;
+            .inspect_err(|error| error!("Couldn't apply new target to device: {}", error));
+
+        if let Err(error) = result {
+            let body = format!(
+                "Failed to apply target to device \"{}\", check the logs for more information",
+                update.name()
+            );
+
+            let _ = notifications
+                .notify("Failed to apply target", &body, None)
+                .await;
+
+            return Err(error);
+        }
     }
 
     Ok(())
