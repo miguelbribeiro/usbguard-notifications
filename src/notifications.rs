@@ -66,12 +66,14 @@ impl TryFrom<&Message> for NotificationSignal {
         let interface = interface.as_ref().map(|i| i.as_str());
         let member = member.as_ref().map(|m| m.as_str());
 
-        match (message_type, interface, member) {
-            (
-                zbus::message::Type::Signal,
-                Some(DBUS_NOTIFICATIONS_INTERFACE),
-                Some(DBUS_NOTIFICATIONS_INTERFACE_ACTION_INVOKED),
-            ) => message
+        if message_type != zbus::message::Type::Signal
+            || interface.unwrap_or_default() != DBUS_NOTIFICATIONS_INTERFACE
+        {
+            return Err(());
+        }
+
+        match member {
+            Some(DBUS_NOTIFICATIONS_INTERFACE_ACTION_INVOKED) => message
                 .body()
                 .deserialize::<(u32, String)>()
                 .map(|value| {
@@ -81,11 +83,7 @@ impl TryFrom<&Message> for NotificationSignal {
                     })
                 })
                 .map_err(|_| ()),
-            (
-                zbus::message::Type::Signal,
-                Some(DBUS_NOTIFICATIONS_INTERFACE),
-                Some(DBUS_NOTIFICATIONS_INTERFACE_CLOSED),
-            ) => message
+            Some(DBUS_NOTIFICATIONS_INTERFACE_CLOSED) => message
                 .body()
                 .deserialize::<(u32, u32)>()
                 .map(|value| {
