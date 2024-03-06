@@ -10,8 +10,9 @@ use tracing::error;
 use zbus::export::ordered_stream::OrderedStreamExt;
 use zbus::{zvariant::Value, Connection, Message, Proxy};
 
+const NOTIFICATION_APP_NAME: &str = "usbguard-notifications";
 const NOTIFICATION_ACTION_CHANNEL_SIZE: usize = 64;
-const NOTIFICATION_ACTION_TIMEOUT: Duration = Duration::from_secs(300);
+const NOTIFICATION_ACTION_TIMEOUT: Duration = Duration::from_secs(60 * 5);
 
 const DBUS_NOTIFICATIONS_DESTINATION: &str = "org.freedesktop.Notifications";
 const DBUS_NOTIFICATIONS_OBJECT: &str = "/org/freedesktop/Notifications";
@@ -170,7 +171,7 @@ impl Notifications {
         // subscription should be made before sending the notification to ensure no messages are missed
         let receiver: Receiver<NotificationSignal> = self.sender.subscribe();
 
-        let notification_id: u32 = self.send_notification(update.name()).await?;
+        let notification_id: u32 = self.notify_query_user(update.name()).await?;
 
         // after a notification is sent, 1 of 3 things can happen:
         // 1. the user invokes an action of the notification
@@ -188,7 +189,25 @@ impl Notifications {
         }
     }
 
-    async fn send_notification(&self, device_name: &str) -> anyhow::Result<u32> {
+    // basic wrapper
+    pub async fn notify(
+        &self,
+        summary: &str,
+        body: &str,
+        timeout: Duration,
+    ) -> anyhow::Result<u32> {
+        notify(
+            &self.connection,
+            summary,
+            body,
+            &[],
+            &HashMap::default(),
+            timeout,
+        )
+        .await
+    }
+
+    async fn notify_query_user(&self, device_name: &str) -> anyhow::Result<u32> {
         let mut hints = HashMap::new();
         hints.insert("urgency", Value::U8(2)); // set urgency to critical
 
@@ -201,7 +220,6 @@ impl Notifications {
 
         notify(
             &self.connection,
-            "usbguard-notifications",
             "New blocked USB device detected",
             format!("Allow device \"{}\"?", device_name).as_str(),
             actions.as_slice(),
@@ -215,7 +233,6 @@ impl Notifications {
 /// Returns the notification ID.
 async fn notify(
     connection: &Connection,
-    app_name: &str,
     summary: &str,
     body: &str,
     actions: &[&str],
@@ -223,7 +240,7 @@ async fn notify(
     timeout: Duration,
 ) -> anyhow::Result<u32> {
     let body = &(
-        app_name,
+        NOTIFICATION_APP_NAME,
         0u32,
         "",
         summary,
