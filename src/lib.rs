@@ -33,21 +33,16 @@ pub async fn run() {
 
         // only query user if the device was just inserted and its target is "block", otherwise
         // ignore this device
-        match (
-            update.event(),
-            update.target().unwrap_or(DeviceTarget::Allow),
-        ) {
-            (DeviceEvent::Insert, DeviceTarget::Block) => {}
-            _ => continue,
-        };
+        if update.event() == DeviceEvent::Insert
+            && update.target().unwrap_or(DeviceTarget::Allow) == DeviceTarget::Block
+        {
+            let device_manager = device_manager.clone();
+            let notifications = notifications.clone();
 
-        // clone Arcs
-        let device_manager = device_manager.clone();
-        let notifications = notifications.clone();
-
-        tokio::spawn(async move {
-            let _ = query_user(&update, &notifications, device_manager.as_ref()).await;
-        });
+            tokio::spawn(async move {
+                let _ = query_user(&update, &notifications, device_manager.as_ref()).await;
+            });
+        }
     }
 }
 
