@@ -10,8 +10,6 @@ mod notifications;
 mod usbguard;
 mod usbguard_dbus;
 
-const CHANNEL_BUFFER_SIZE: usize = 64;
-
 pub async fn run() {
     let notifications = Arc::new(Notifications::new().await.unwrap());
     let device_manager = Arc::new(
