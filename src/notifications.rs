@@ -180,7 +180,10 @@ impl Notifications {
             signal = self.get_next_signal(notification_id, receiver) => {
                 match signal {
                     NotificationSignal::ActionInvoked(signal) => Ok(signal.action.as_str() == ACTION_ALLOW.0),
-                    NotificationSignal::Closed(_) => Err(anyhow!("notification closed or expired")),
+                    NotificationSignal::Closed(closed) => match closed.reason {
+                        1 => Err(TimeoutError.into()),
+                        _ => Err(anyhow!("notification closed")),
+                    },
                 }
             },
         }
