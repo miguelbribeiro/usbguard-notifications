@@ -1,4 +1,4 @@
-//! High level abstractions to communicate with the user with notifications.
+//! High level abstractions to communicate with the user using notifications.
 
 use crate::notifications::{NotificationManager, NotificationSignal};
 use crate::usbguard::DevicePresenceUpdate;
@@ -29,7 +29,7 @@ pub async fn ask_allow_device(
     // subscription should be made before sending the notification to ensure no messages are missed
     let mut receiver: Receiver<NotificationSignal> = notifications.subscribe();
 
-    let notification_id: u32 = notify_query_user(notifications, update.name()).await?;
+    let notification_id: u32 = notify_action_device(notifications, update.name()).await?;
 
     // after a notification is sent, 1 of 3 things can happen:
     // 1. the user invokes an action of the notification
@@ -50,6 +50,7 @@ pub async fn ask_allow_device(
     }
 }
 
+/// Gets the next signal for the notification with the provided ID.
 async fn get_next_signal(
     notification_id: u32,
     recv: &mut Receiver<NotificationSignal>,
@@ -68,7 +69,11 @@ async fn get_next_signal(
     }
 }
 
-async fn notify_query_user(
+/// Sends the notification with actions so the user can choose to allow or not
+/// the new device.
+///
+/// Returns the notification ID.
+async fn notify_action_device(
     notifications: &impl NotificationManager,
     device_name: &str,
 ) -> anyhow::Result<u32> {
