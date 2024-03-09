@@ -2,6 +2,7 @@ use anyhow::anyhow;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use tokio::sync::broadcast::Receiver;
+use tracing::info;
 
 use crate::notifications::{notify_action_device, NotificationManager, NotificationSignal};
 use crate::usbguard::{DeviceEvent, DeviceManager, DevicePresenceUpdate};
@@ -17,6 +18,7 @@ impl Display for TimeoutError {
 
 impl std::error::Error for TimeoutError {}
 
+#[tracing::instrument(skip(notifications, devices))]
 pub async fn ask_allow_device(
     notifications: &impl NotificationManager,
     devices: &impl DeviceManager,
@@ -47,6 +49,7 @@ pub async fn ask_allow_device(
         },
         () = wait_removal(&mut receiver_devices, update.device_id()) => {
             let _ = notifications.close(notification_id).await;
+            info!("Device was removed, closing notification {}", notification_id);
             Err(anyhow!("device was removed while waiting for an action"))
         }
     }
