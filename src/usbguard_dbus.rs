@@ -144,8 +144,8 @@ impl DeviceManager for DbusDeviceManager {
         panic!("Stream ended unexpectedly");
     }
 
-    fn subscribe_device_changes(&self) -> anyhow::Result<Receiver<Arc<DevicePresenceUpdate>>> {
-        Ok(self.channel.subscribe())
+    fn subscribe_device_changes(&self) -> Receiver<Arc<DevicePresenceUpdate>> {
+        self.channel.subscribe()
     }
 
     async fn apply_device_target(

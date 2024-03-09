@@ -1,9 +1,10 @@
 use anyhow::anyhow;
 use std::fmt::{Display, Formatter};
+use std::sync::Arc;
 use tokio::sync::broadcast::Receiver;
 
 use crate::notifications::{notify_action_device, NotificationManager, NotificationSignal};
-use crate::usbguard::DevicePresenceUpdate;
+use crate::usbguard::{DeviceEvent, DeviceManager, DevicePresenceUpdate};
 
 #[derive(Debug)]
 pub struct TimeoutError;
@@ -18,10 +19,13 @@ impl std::error::Error for TimeoutError {}
 
 pub async fn ask_allow_device(
     notifications: &impl NotificationManager,
+    devices: &impl DeviceManager,
     update: &DevicePresenceUpdate,
 ) -> anyhow::Result<bool> {
-    // subscription should be made before sending the notification to ensure no messages are missed
-    let mut receiver: Receiver<NotificationSignal> = notifications.subscribe();
+    // subscriptions should be made before sending the notification to ensure no messages are missed
+    let mut receiver_notifications: Receiver<NotificationSignal> = notifications.subscribe();
+    let mut receiver_devices: Receiver<Arc<DevicePresenceUpdate>> =
+        devices.subscribe_device_changes();
 
     let notification_id: u32 = notify_action_device(notifications, update.name()).await?;
 
@@ -32,7 +36,7 @@ pub async fn ask_allow_device(
 
     // TODO check if the USB device is removed
     tokio::select! {
-        signal = get_next_signal(notification_id, &mut receiver) => {
+        signal = next_signal_for_notification(notification_id, &mut receiver_notifications) => {
             match signal {
                 NotificationSignal::ActionInvoked(signal) => Ok(signal.is_allow()),
                 NotificationSignal::Closed(closed) => match closed.reason {
@@ -41,11 +45,26 @@ pub async fn ask_allow_device(
                 },
             }
         },
+        () = wait_removal(&mut receiver_devices, update.device_id()) => {
+            let _ = notifications.close(notification_id).await;
+            Err(anyhow!("device was removed while waiting for an action"))
+        }
+    }
+}
+
+/// Waits until the specified device is removed.
+async fn wait_removal(receiver: &mut Receiver<Arc<DevicePresenceUpdate>>, device_id: u32) {
+    loop {
+        let update = receiver.recv().await.unwrap();
+
+        if update.device_id() == device_id && update.event() == DeviceEvent::Remove {
+            return;
+        }
     }
 }
 
 /// Gets the next signal for the notification with the provided ID.
-async fn get_next_signal(
+async fn next_signal_for_notification(
     notification_id: u32,
     recv: &mut Receiver<NotificationSignal>,
 ) -> NotificationSignal {

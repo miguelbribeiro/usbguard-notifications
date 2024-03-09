@@ -99,7 +99,7 @@ pub trait DeviceManager: Send {
     fn watch_device_changes(&self) -> impl std::future::Future<Output = anyhow::Result<()>> + Send;
     fn subscribe_device_changes(
         &self,
-    ) -> anyhow::Result<tokio::sync::broadcast::Receiver<Arc<DevicePresenceUpdate>>>;
+    ) -> tokio::sync::broadcast::Receiver<Arc<DevicePresenceUpdate>>;
     fn apply_device_target(
         &self,
         device_id: u32,
