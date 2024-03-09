@@ -1,11 +1,13 @@
 #![allow(dead_code)]
 
-use std::collections::HashMap;
+use crate::ask::*;
+use crate::notifications::NotificationManager;
 use crate::usbguard::{DeviceEvent, DeviceManager, DevicePresenceUpdate, DeviceTarget};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{debug, error, instrument, warn};
-use crate::notifications::{NotificationManager, ask_allow_device, TimeoutError};
 
+mod ask;
 mod notifications;
 mod usbguard;
 mod usbguard_dbus;
@@ -82,7 +84,13 @@ async fn query_user(
             );
 
             let _ = notification_manager
-                .notify("Failed to apply target", &body, &[], &HashMap::default(), None)
+                .notify(
+                    "Failed to apply target",
+                    &body,
+                    &[],
+                    &HashMap::default(),
+                    None,
+                )
                 .await;
 
             return Err(error);
