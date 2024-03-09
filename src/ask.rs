@@ -1,4 +1,5 @@
 use anyhow::anyhow;
+use core::panic;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use tokio::sync::broadcast::Receiver;
@@ -45,6 +46,7 @@ pub async fn ask_allow_device(
                     1 => Err(TimeoutError.into()),
                     _ => Err(anyhow!("notification closed")),
                 },
+                _ => panic!("this signal type shouldn't have reached this point"),
             }
         },
         () = wait_removal(&mut receiver_devices, update.device_id()) => {
@@ -77,6 +79,7 @@ async fn next_signal_for_notification(
         let signal_notification_id = match &signal {
             NotificationSignal::ActionInvoked(signal) => signal.notification_id,
             NotificationSignal::Closed(signal) => signal.notification_id,
+            _ => continue,
         };
 
         if signal_notification_id == notification_id {

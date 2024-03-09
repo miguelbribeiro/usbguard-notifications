@@ -62,9 +62,9 @@ impl TryFrom<&Message> for NotificationSignal {
                     })
                 })
                 .map_err(|err| err.into()),
-            Some(DBUS_NOTIFICATIONS_INTERFACE_ACTIVATION_TOKEN) => Err(anyhow!(
-                "handling for signal ActivationToken is not implemented"
-            )),
+            Some(DBUS_NOTIFICATIONS_INTERFACE_ACTIVATION_TOKEN) => {
+                Ok(NotificationSignal::ActivationToken)
+            }
             _ => Err(anyhow!("unknown interface member")),
         }
     }

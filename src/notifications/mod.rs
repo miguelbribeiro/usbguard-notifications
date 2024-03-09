@@ -18,6 +18,7 @@ const ACTION_IGNORE: (&str, &str) = ("ignore", "Ignore");
 pub enum NotificationSignal {
     ActionInvoked(NotificationActionInvoked),
     Closed(NotificationClosed),
+    ActivationToken,
 }
 
 #[derive(Debug, Clone)]
