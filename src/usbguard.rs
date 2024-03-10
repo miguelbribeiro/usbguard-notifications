@@ -96,10 +96,17 @@ impl DevicePresenceUpdate {
 }
 
 pub trait DeviceManager: Send {
+    /// Listens and sends device presence updates to subscribers.
+    /// The returned future only completes if there is an error.
     fn watch_device_changes(&self) -> impl std::future::Future<Output = anyhow::Result<()>> + Send;
+    
+    /// Returns a [Receiver](tokio::sync::broadcast::Receiver) that receives device presence updates.
+    /// The listener must be started before, by running [watch_device_changes](Self::watch_device_changes).
     fn subscribe_device_changes(
         &self,
     ) -> tokio::sync::broadcast::Receiver<Arc<DevicePresenceUpdate>>;
+    
+    /// Applies a target to the specified device.
     fn apply_device_target(
         &self,
         device_id: u32,
