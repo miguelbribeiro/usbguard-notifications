@@ -10,12 +10,11 @@ use tracing::{debug, error, instrument, warn};
 mod ask;
 mod notifications;
 mod usbguard;
-mod usbguard_dbus;
 
 pub async fn run() {
     let notifications = Arc::new(notifications::dbus::NotificationsDbus::new().await.unwrap());
     let device_manager = Arc::new(
-        usbguard_dbus::DbusDeviceManager::new()
+        usbguard::dbus::DbusDeviceManager::new()
             .await
             .expect("should be able to connect to system bus"),
     );

@@ -8,11 +8,11 @@ use zbus::proxy::SignalStream;
 use zbus::{Connection, Message, Proxy};
 use zvariant::Type;
 
-const USBGUARD_DBUS_DESTINATION: &'static str = "org.usbguard1";
-const USBGUARD_DBUS_OBJECT: &'static str = "/org/usbguard1/Devices";
-const USBGUARD_DBUS_INTERFACE: &'static str = "org.usbguard.Devices1";
-const USBGUARD_DBUS_INTERFACE_PRESENCE_CHANGED: &'static str = "DevicePresenceChanged";
-const USBGUARD_DBUS_INTERFACE_APPLY_POLICY: &'static str = "applyDevicePolicy";
+const DBUS_DESTINATION: &str = "org.usbguard1";
+const DBUS_OBJECT: &str = "/org/usbguard1/Devices";
+const DBUS_INTERFACE: &str = "org.usbguard.Devices1";
+const DBUS_INTERFACE_PRESENCE_CHANGED: &str = "DevicePresenceChanged";
+const DBUS_INTERFACE_APPLY_POLICY: &str = "applyDevicePolicy";
 
 const CHANNEL_LIMIT: usize = 64;
 
@@ -26,9 +26,9 @@ impl<'a> From<Proxy<'a>> for UsbGuardDevicesProxy<'a> {
 }
 
 impl<'a> zbus::proxy::ProxyDefault for UsbGuardDevicesProxy<'a> {
-    const INTERFACE: Option<&'static str> = Some(USBGUARD_DBUS_INTERFACE);
-    const DESTINATION: Option<&'static str> = Some(USBGUARD_DBUS_DESTINATION);
-    const PATH: Option<&'static str> = Some(USBGUARD_DBUS_OBJECT);
+    const INTERFACE: Option<&'static str> = Some(DBUS_INTERFACE);
+    const DESTINATION: Option<&'static str> = Some(DBUS_DESTINATION);
+    const PATH: Option<&'static str> = Some(DBUS_OBJECT);
 }
 
 impl<'a> UsbGuardDevicesProxy<'a> {
@@ -73,8 +73,8 @@ impl TryFrom<Message> for DevicePresenceUpdateInternal {
         match (message_type, interface, member) {
             (
                 zbus::message::Type::Signal,
-                Some(USBGUARD_DBUS_INTERFACE),
-                Some(USBGUARD_DBUS_INTERFACE_PRESENCE_CHANGED),
+                Some(DBUS_INTERFACE),
+                Some(DBUS_INTERFACE_PRESENCE_CHANGED),
             ) => message
                 .body()
                 .deserialize::<DevicePresenceUpdateInternal>()
@@ -165,10 +165,10 @@ impl DeviceManager for DbusDeviceManager {
         // TODO check return
         self.connection
             .call_method(
-                Some(USBGUARD_DBUS_DESTINATION),
-                USBGUARD_DBUS_OBJECT,
-                Some(USBGUARD_DBUS_INTERFACE),
-                USBGUARD_DBUS_INTERFACE_APPLY_POLICY,
+                Some(DBUS_DESTINATION),
+                DBUS_OBJECT,
+                Some(DBUS_INTERFACE),
+                DBUS_INTERFACE_APPLY_POLICY,
                 &body,
             )
             .await

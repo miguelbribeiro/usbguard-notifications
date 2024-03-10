@@ -1,6 +1,8 @@
 use anyhow::anyhow;
 use std::sync::Arc;
 
+pub mod dbus;
+
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum DeviceEvent {
     Present,
