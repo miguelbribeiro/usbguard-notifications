@@ -26,9 +26,8 @@ pub async fn ask_allow_device(
     update: &DevicePresenceUpdate,
 ) -> anyhow::Result<bool> {
     // subscriptions should be made before sending the notification to ensure no messages are missed
-    let mut receiver_notifications: Receiver<NotificationSignal> = notifications.subscribe();
-    let mut receiver_devices: Receiver<Arc<DevicePresenceUpdate>> =
-        devices.subscribe_device_changes();
+    let mut receiver_notifications = notifications.subscribe();
+    let mut receiver_devices = devices.subscribe_device_changes();
 
     let notification_id: u32 = notify_action_device(notifications, update.name()).await?;
 
@@ -39,7 +38,7 @@ pub async fn ask_allow_device(
 
     tokio::select! {
         signal = next_signal_for_notification(notification_id, &mut receiver_notifications) => {
-            match signal {
+            match signal.as_ref() {
                 NotificationSignal::ActionInvoked(signal) => Ok(signal.is_allow()),
                 NotificationSignal::Closed(closed) => match closed.reason {
                     1 => Err(TimeoutError.into()),
@@ -70,12 +69,12 @@ async fn wait_removal(receiver: &mut Receiver<Arc<DevicePresenceUpdate>>, device
 /// Gets the next signal for the notification with the provided ID.
 async fn next_signal_for_notification(
     notification_id: u32,
-    recv: &mut Receiver<NotificationSignal>,
-) -> NotificationSignal {
+    recv: &mut Receiver<Arc<NotificationSignal>>,
+) -> Arc<NotificationSignal> {
     loop {
         let signal = recv.recv().await.unwrap();
 
-        let signal_notification_id = match &signal {
+        let signal_notification_id = match signal.as_ref() {
             NotificationSignal::ActionInvoked(signal) => signal.notification_id,
             NotificationSignal::Closed(signal) => signal.notification_id,
             _ => continue,

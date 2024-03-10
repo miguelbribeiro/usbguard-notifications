@@ -6,6 +6,7 @@
 pub mod dbus;
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 use zvariant::Value;
 
@@ -61,7 +62,7 @@ pub trait NotificationManager {
     ) -> impl std::future::Future<Output = anyhow::Result<()>> + Send;
 
     /// Creates a Receiver that will receive signals.
-    fn subscribe(&self) -> tokio::sync::broadcast::Receiver<NotificationSignal>;
+    fn subscribe(&self) -> tokio::sync::broadcast::Receiver<Arc<NotificationSignal>>;
 }
 /// Sends the notification with actions so the user can choose to allow or not
 /// the new device.

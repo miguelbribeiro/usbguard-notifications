@@ -70,12 +70,10 @@ impl TryFrom<&Message> for NotificationSignal {
     }
 }
 
-// TODO wrap NotificationSignal in an Arc
-
 #[derive(Clone)]
 pub struct NotificationsDbus {
     connection: Connection,
-    sender: Sender<NotificationSignal>,
+    sender: Sender<Arc<NotificationSignal>>,
 }
 
 impl NotificationManager for NotificationsDbus {
@@ -134,7 +132,7 @@ impl NotificationManager for NotificationsDbus {
             .map_err(|error| error.into())
     }
 
-    fn subscribe(&self) -> Receiver<NotificationSignal> {
+    fn subscribe(&self) -> Receiver<Arc<NotificationSignal>> {
         self.sender.subscribe()
     }
 }
@@ -169,7 +167,7 @@ impl NotificationsDbus {
                 }
             };
 
-            let _ = self.sender.send(signal); // only fails if there are no receivers
+            let _ = self.sender.send(Arc::new(signal)); // only fails if there are no receivers
         }
 
         Ok(())
