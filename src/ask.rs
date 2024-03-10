@@ -37,7 +37,6 @@ pub async fn ask_allow_device(
     // 2. the notification expires or the user closes it
     // 3. the USB device associated with the notification is removed
 
-    // TODO check if the USB device is removed
     tokio::select! {
         signal = next_signal_for_notification(notification_id, &mut receiver_notifications) => {
             match signal {

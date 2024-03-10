@@ -162,7 +162,6 @@ impl DeviceManager for DbusDeviceManager {
         // (id, target, permanent)
         let body = (device_id, target, false);
 
-        // TODO check return
         self.connection
             .call_method(
                 Some(DBUS_DESTINATION),
