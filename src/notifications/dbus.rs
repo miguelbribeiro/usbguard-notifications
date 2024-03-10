@@ -145,17 +145,11 @@ impl NotificationsDbus {
         let (sender, _) = broadcast::channel(CHANNEL_SIGNAL_SIZE);
         let notifications = NotificationsDbus { connection, sender };
 
-        // TODO unsure if the task should be spawned here
-        let notifications_clone = notifications.clone();
-        tokio::spawn(async move {
-            notifications_clone.watcher().await.unwrap();
-        });
-
         Ok(notifications)
     }
 
     #[tracing::instrument(skip(self))]
-    async fn watcher(&self) -> anyhow::Result<()> {
+    pub async fn watch(&self) -> anyhow::Result<()> {
         let proxy: Proxy = zbus::proxy::Builder::new(&self.connection)
             .destination(DBUS_NOTIFICATIONS_DESTINATION)?
             .path(DBUS_NOTIFICATIONS_OBJECT)?

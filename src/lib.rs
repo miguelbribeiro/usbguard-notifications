@@ -12,21 +12,25 @@ mod notifications;
 mod usbguard;
 
 pub async fn run() {
-    let notifications = Arc::new(notifications::dbus::NotificationsDbus::new().await.unwrap());
-    let device_manager = Arc::new(
-        usbguard::dbus::DbusDeviceManager::new()
-            .await
-            .expect("should be able to connect to system bus"),
-    );
-
+    let notifications = notifications::dbus::NotificationsDbus::new().await.unwrap();
+    let notifications = Arc::new(notifications);
     {
-        let device_manager = device_manager.clone();
+        let notifications = notifications.clone();
         tokio::spawn(async move {
-            device_manager.watch_device_changes().await.unwrap();
+            notifications.watch().await.unwrap();
         });
     }
 
-    let mut receiver = device_manager.subscribe_device_changes();
+    let devices = usbguard::dbus::DbusDeviceManager::new().await.unwrap();
+    let devices = Arc::new(devices);
+    {
+        let devices = devices.clone();
+        tokio::spawn(async move {
+            devices.watch_device_changes().await.unwrap();
+        });
+    }
+
+    let mut receiver = devices.subscribe_device_changes();
     loop {
         let update = receiver.recv().await.unwrap();
 
@@ -35,7 +39,7 @@ pub async fn run() {
         if update.event() == DeviceEvent::Insert
             && update.target().unwrap_or(DeviceTarget::Allow) == DeviceTarget::Block
         {
-            let device_manager = device_manager.clone();
+            let device_manager = devices.clone();
             let notifications = notifications.clone();
 
             tokio::spawn(async move {
