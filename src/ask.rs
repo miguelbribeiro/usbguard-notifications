@@ -6,7 +6,7 @@ use tokio::sync::broadcast::Receiver;
 use tracing::info;
 
 use crate::notifications::{notify_action_device, NotificationManager, NotificationSignal};
-use crate::usbguard::{DeviceEvent, DeviceManager, DevicePresenceUpdate};
+use crate::usbguard::{DeviceEvent, DeviceManager, Device};
 
 #[derive(Debug)]
 pub struct TimeoutError;
@@ -23,7 +23,7 @@ impl std::error::Error for TimeoutError {}
 pub async fn ask_allow_device(
     notifications: &impl NotificationManager,
     devices: &impl DeviceManager,
-    update: &DevicePresenceUpdate,
+    update: &Device,
 ) -> anyhow::Result<bool> {
     // subscriptions should be made before sending the notification to ensure no messages are missed
     let mut receiver_notifications = notifications.subscribe();
@@ -56,7 +56,7 @@ pub async fn ask_allow_device(
 }
 
 /// Waits until the specified device is removed.
-async fn wait_removal(receiver: &mut Receiver<Arc<DevicePresenceUpdate>>, device_id: u32) {
+async fn wait_removal(receiver: &mut Receiver<Arc<Device>>, device_id: u32) {
     loop {
         let update = receiver.recv().await.unwrap();
 

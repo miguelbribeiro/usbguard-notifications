@@ -52,15 +52,16 @@ impl From<DeviceTarget> for u32 {
     }
 }
 
+/// Represents a USB device handled by USBGuard.
 #[derive(Debug)]
-pub struct DevicePresenceUpdate {
+pub struct Device {
     device_id: u32,
     event: DeviceEvent,
     rule: Box<str>,
     name: Box<str>,
 }
 
-impl DevicePresenceUpdate {
+impl Device {
     pub fn new(device_id: u32, event: DeviceEvent, rule: String, name: String) -> Self {
         Self {
             device_id,
@@ -106,7 +107,7 @@ pub trait DeviceManager: Send {
     /// The listener must be started before, by running [watch_device_changes](Self::watch_device_changes).
     fn subscribe_device_changes(
         &self,
-    ) -> tokio::sync::broadcast::Receiver<Arc<DevicePresenceUpdate>>;
+    ) -> tokio::sync::broadcast::Receiver<Arc<Device>>;
 
     /// Applies a target to the specified device.
     fn apply_device_target(

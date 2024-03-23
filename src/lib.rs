@@ -2,7 +2,7 @@
 
 use crate::ask::*;
 use crate::notifications::NotificationManager;
-use crate::usbguard::{DeviceEvent, DeviceManager, DevicePresenceUpdate, DeviceTarget};
+use crate::usbguard::{DeviceEvent, DeviceManager, Device, DeviceTarget};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{debug, error, instrument, warn};
@@ -51,7 +51,7 @@ pub async fn run() {
 
 #[instrument(skip(notifications, devices))]
 async fn query_user(
-    update: &DevicePresenceUpdate,
+    update: &Device,
     notifications: &impl NotificationManager,
     devices: &impl DeviceManager,
 ) -> anyhow::Result<()> {
