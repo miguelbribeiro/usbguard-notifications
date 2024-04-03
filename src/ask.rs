@@ -6,7 +6,7 @@ use tokio::sync::broadcast::Receiver;
 use tracing::info;
 
 use crate::notifications::{notify_action_device, NotificationManager, NotificationSignal};
-use crate::usbguard::{DeviceUpdate, DeviceEvent, DeviceManager};
+use crate::usbguard::{DeviceEvent, DeviceManager, DeviceUpdate};
 
 #[derive(Debug)]
 pub struct TimeoutError;
@@ -49,7 +49,7 @@ pub async fn prompt_user_or_wait_removal(
                 _ => panic!("this signal type shouldn't have reached this point"),
             }
         },
-        () = wait_removal(&mut receiver_devices, device.device_id()) => {
+        () = wait_removal(&mut receiver_devices, device.device().device_id()) => {
             let _ = notification_manager.close(notification_id).await;
             info!("Device was removed, closing notification {}", notification_id);
             Err(anyhow!("device was removed while waiting for an action"))
@@ -62,7 +62,7 @@ async fn wait_removal(receiver: &mut Receiver<Arc<DeviceUpdate>>, device_id: u32
     loop {
         let update = receiver.recv().await.unwrap();
 
-        if update.device_id() == device_id && update.event() == DeviceEvent::Remove {
+        if update.device().device_id() == device_id && update.event() == DeviceEvent::Remove {
             return;
         }
     }

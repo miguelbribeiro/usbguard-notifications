@@ -52,39 +52,23 @@ impl From<DeviceTarget> for u32 {
     }
 }
 
-/// Represents a USB device update handled by USBGuard.
 #[derive(Debug)]
-pub struct DeviceUpdate {
-    device_id: u32,
-    event: DeviceEvent,
-    rule: Box<str>,
-    name: Box<str>,
+pub struct Device {
+    id: u32,
+    rule: String,
 }
 
-impl DeviceUpdate {
-    pub fn new(device_id: u32, event: DeviceEvent, rule: String, name: String) -> Self {
-        Self {
-            device_id,
-            event,
-            rule: rule.into_boxed_str(),
-            name: name.into_boxed_str(),
-        }
+impl Device {
+    pub fn new(id: u32, rule: String) -> Self {
+        Self { id, rule }
     }
 
     pub fn device_id(&self) -> u32 {
-        self.device_id
-    }
-
-    pub fn event(&self) -> DeviceEvent {
-        self.event
+        self.id
     }
 
     pub fn rule(&self) -> &str {
         &self.rule
-    }
-
-    pub fn name(&self) -> &str {
-        &self.name
     }
 
     pub fn target(&self) -> anyhow::Result<DeviceTarget> {
@@ -95,6 +79,36 @@ impl DeviceUpdate {
             .ok_or_else(|| anyhow!("String is empty"))?;
 
         DeviceTarget::parse(target)
+    }
+}
+
+/// Represents a USB device update handled by USBGuard.
+#[derive(Debug)]
+pub struct DeviceUpdate {
+    device: Device,
+    event: DeviceEvent,
+    name: String,
+}
+
+impl DeviceUpdate {
+    pub fn new(device: Device, event: DeviceEvent, name: String) -> Self {
+        Self {
+            device,
+            event,
+            name,
+        }
+    }
+
+    pub fn device(&self) -> &Device {
+        &self.device
+    }
+
+    pub fn event(&self) -> DeviceEvent {
+        self.event
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
     }
 }
 

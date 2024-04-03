@@ -2,7 +2,7 @@
 
 use crate::ask::*;
 use crate::notifications::NotificationManager;
-use crate::usbguard::{DeviceUpdate, DeviceEvent, DeviceManager, DeviceTarget};
+use crate::usbguard::{DeviceEvent, DeviceManager, DeviceTarget, DeviceUpdate};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{debug, error, instrument, warn};
@@ -37,7 +37,7 @@ pub async fn run() {
         // only query user if the device was just inserted and its target is "block", otherwise
         // ignore this device
         if update.event() == DeviceEvent::Insert
-            && update.target().unwrap_or(DeviceTarget::Allow) == DeviceTarget::Block
+            && update.device().target().unwrap_or(DeviceTarget::Allow) == DeviceTarget::Block
         {
             let device_manager = devices.clone();
             let notifications = notifications.clone();
@@ -80,7 +80,7 @@ async fn handle_blocked_device(
 
     if allow {
         let result = device_manager
-            .apply_device_target(device.device_id(), DeviceTarget::Allow)
+            .apply_device_target(device.device().device_id(), DeviceTarget::Allow)
             .await
             .inspect_err(|error| error!("Couldn't apply new target to device: {}", error));
 
