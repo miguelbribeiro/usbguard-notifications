@@ -6,7 +6,7 @@ use tokio::sync::broadcast::Receiver;
 use tracing::info;
 
 use crate::notifications::{notify_action_device, NotificationManager, NotificationSignal};
-use crate::usbguard::{DeviceEvent, DeviceManager, Device};
+use crate::usbguard::{Device, DeviceEvent, DeviceManager};
 
 #[derive(Debug)]
 pub struct TimeoutError;

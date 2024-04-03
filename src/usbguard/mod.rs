@@ -105,9 +105,7 @@ pub trait DeviceManager: Send {
 
     /// Returns a [Receiver](tokio::sync::broadcast::Receiver) that receives device presence updates.
     /// The listener must be started before, by running [watch_device_changes](Self::watch_device_changes).
-    fn subscribe_device_changes(
-        &self,
-    ) -> tokio::sync::broadcast::Receiver<Arc<Device>>;
+    fn subscribe_device_changes(&self) -> tokio::sync::broadcast::Receiver<Arc<Device>>;
 
     /// Applies a target to the specified device.
     fn apply_device_target(

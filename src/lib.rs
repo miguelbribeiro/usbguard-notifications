@@ -2,7 +2,7 @@
 
 use crate::ask::*;
 use crate::notifications::NotificationManager;
-use crate::usbguard::{DeviceEvent, DeviceManager, Device, DeviceTarget};
+use crate::usbguard::{Device, DeviceEvent, DeviceManager, DeviceTarget};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{debug, error, instrument, warn};
@@ -43,7 +43,9 @@ pub async fn run() {
             let notifications = notifications.clone();
 
             tokio::spawn(async move {
-                let _ = handle_blocked_device(notifications.as_ref(), device_manager.as_ref(), &update).await;
+                let _ =
+                    handle_blocked_device(notifications.as_ref(), device_manager.as_ref(), &update)
+                        .await;
             });
         }
     }
@@ -56,22 +58,23 @@ async fn handle_blocked_device(
     device_manager: &impl DeviceManager,
     device: &Device,
 ) -> anyhow::Result<()> {
-    let allow = match prompt_user_or_wait_removal(notification_manager, device_manager, device).await {
-        Ok(target) => target,
-        Err(error) => {
-            match error.downcast_ref::<TimeoutError>() {
-                Some(_) => {
-                    debug!("Time limit for receiving an action from the user has been exceeded")
-                }
-                None => warn!(
-                    "Error while sending notification or getting its action back: {}",
-                    &error
-                ),
-            };
+    let allow =
+        match prompt_user_or_wait_removal(notification_manager, device_manager, device).await {
+            Ok(target) => target,
+            Err(error) => {
+                match error.downcast_ref::<TimeoutError>() {
+                    Some(_) => {
+                        debug!("Time limit for receiving an action from the user has been exceeded")
+                    }
+                    None => warn!(
+                        "Error while sending notification or getting its action back: {}",
+                        &error
+                    ),
+                };
 
-            return Err(error);
-        }
-    };
+                return Err(error);
+            }
+        };
 
     debug!("Notification result: should allow: {}", allow);
 

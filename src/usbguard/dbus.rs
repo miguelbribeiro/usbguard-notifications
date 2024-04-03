@@ -1,4 +1,4 @@
-use crate::usbguard::{DeviceManager, Device, DeviceTarget};
+use crate::usbguard::{Device, DeviceManager, DeviceTarget};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -91,12 +91,7 @@ impl TryFrom<DevicePresenceUpdateInternal> for Device {
     fn try_from(mut value: DevicePresenceUpdateInternal) -> Result<Self, Self::Error> {
         let name = value.attributes.remove("name").ok_or("name")?;
 
-        Ok(Device::new(
-            value.id,
-            value.event.into(),
-            value.rule,
-            name,
-        ))
+        Ok(Device::new(value.id, value.event.into(), value.rule, name))
     }
 }
 
