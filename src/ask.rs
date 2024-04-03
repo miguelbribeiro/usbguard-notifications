@@ -25,13 +25,13 @@ impl std::error::Error for TimeoutError {}
 pub async fn prompt_user_or_wait_removal(
     notification_manager: &impl NotificationManager,
     device_manager: &impl DeviceManager,
-    device: &DeviceUpdate,
+    update: &DeviceUpdate,
 ) -> anyhow::Result<bool> {
     // subscriptions should be made before sending the notification to ensure no messages are missed
     let mut receiver_notifications = notification_manager.subscribe();
     let mut receiver_devices = device_manager.subscribe_device_changes();
 
-    let notification_id: u32 = notify_action_device(notification_manager, device.name()).await?;
+    let notification_id: u32 = notify_action_device(notification_manager, update.name()).await?;
 
     // after a notification is sent, 1 of 3 things can happen:
     // 1. the user invokes an action of the notification
@@ -49,7 +49,7 @@ pub async fn prompt_user_or_wait_removal(
                 _ => panic!("this signal type shouldn't have reached this point"),
             }
         },
-        () = wait_removal(&mut receiver_devices, device.device().device_id()) => {
+        () = wait_removal(&mut receiver_devices, update.device().device_id()) => {
             let _ = notification_manager.close(notification_id).await;
             info!("Device was removed, closing notification {}", notification_id);
             Err(anyhow!("device was removed while waiting for an action"))

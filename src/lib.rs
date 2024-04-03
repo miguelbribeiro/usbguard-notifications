@@ -56,10 +56,10 @@ pub async fn run() {
 async fn handle_blocked_device(
     notification_manager: &impl NotificationManager,
     device_manager: &impl DeviceManager,
-    device: &DeviceUpdate,
+    update: &DeviceUpdate,
 ) -> anyhow::Result<()> {
     let allow =
-        match prompt_user_or_wait_removal(notification_manager, device_manager, device).await {
+        match prompt_user_or_wait_removal(notification_manager, device_manager, update).await {
             Ok(target) => target,
             Err(error) => {
                 match error.downcast_ref::<TimeoutError>() {
@@ -80,14 +80,14 @@ async fn handle_blocked_device(
 
     if allow {
         let result = device_manager
-            .apply_device_target(device.device().device_id(), DeviceTarget::Allow)
+            .apply_device_target(update.device().device_id(), DeviceTarget::Allow)
             .await
             .inspect_err(|error| error!("Couldn't apply new target to device: {}", error));
 
         if let Err(error) = result {
             let body = format!(
                 "Failed to apply target to device \"{}\", check the logs for more information",
-                device.name()
+                update.name()
             );
 
             let _ = notification_manager
