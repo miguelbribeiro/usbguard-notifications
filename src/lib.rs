@@ -2,7 +2,7 @@
 
 use crate::ask::*;
 use crate::notifications::NotificationManager;
-use crate::usbguard::{Device, DeviceEvent, DeviceManager, DeviceTarget};
+use crate::usbguard::{DeviceUpdate, DeviceEvent, DeviceManager, DeviceTarget};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{debug, error, instrument, warn};
@@ -56,7 +56,7 @@ pub async fn run() {
 async fn handle_blocked_device(
     notification_manager: &impl NotificationManager,
     device_manager: &impl DeviceManager,
-    device: &Device,
+    device: &DeviceUpdate,
 ) -> anyhow::Result<()> {
     let allow =
         match prompt_user_or_wait_removal(notification_manager, device_manager, device).await {

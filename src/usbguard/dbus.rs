@@ -1,4 +1,4 @@
-use crate::usbguard::{Device, DeviceManager, DeviceTarget};
+use crate::usbguard::{DeviceUpdate, DeviceManager, DeviceTarget};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -84,20 +84,20 @@ impl TryFrom<Message> for DevicePresenceUpdateInternal {
     }
 }
 
-impl TryFrom<DevicePresenceUpdateInternal> for Device {
+impl TryFrom<DevicePresenceUpdateInternal> for DeviceUpdate {
     type Error = &'static str;
 
     /// Only fails if an attribute was missing.
     fn try_from(mut value: DevicePresenceUpdateInternal) -> Result<Self, Self::Error> {
         let name = value.attributes.remove("name").ok_or("name")?;
 
-        Ok(Device::new(value.id, value.event.into(), value.rule, name))
+        Ok(DeviceUpdate::new(value.id, value.event.into(), value.rule, name))
     }
 }
 
 pub struct DbusDeviceManager {
     connection: Connection,
-    channel: Sender<Arc<Device>>,
+    channel: Sender<Arc<DeviceUpdate>>,
 }
 
 impl DbusDeviceManager {
@@ -125,7 +125,7 @@ impl DeviceManager for DbusDeviceManager {
                 },
             };
 
-            let update: Device = match update.try_into() {
+            let update: DeviceUpdate = match update.try_into() {
                 Ok(update) => update,
                 Err(error) => {
                     eprintln!("Failed to convert: {}", error);
@@ -139,7 +139,7 @@ impl DeviceManager for DbusDeviceManager {
         panic!("Stream ended unexpectedly");
     }
 
-    fn subscribe_device_changes(&self) -> Receiver<Arc<Device>> {
+    fn subscribe_device_changes(&self) -> Receiver<Arc<DeviceUpdate>> {
         self.channel.subscribe()
     }
 
