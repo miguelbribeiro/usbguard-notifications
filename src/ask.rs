@@ -19,21 +19,23 @@ impl Display for TimeoutError {
 
 impl std::error::Error for TimeoutError {}
 
-#[tracing::instrument(skip(notifications, devices))]
-pub async fn ask_allow_device(
-    notifications: &impl NotificationManager,
-    devices: &impl DeviceManager,
-    update: &Device,
+/// Prompts the user to allow or ignore a blocked device.
+/// Returns once the user has made a decision or the device in question has been removed.
+#[tracing::instrument(skip(notification_manager, device_manager))]
+pub async fn prompt_user_or_wait_removal(
+    notification_manager: &impl NotificationManager,
+    device_manager: &impl DeviceManager,
+    device: &Device,
 ) -> anyhow::Result<bool> {
     // subscriptions should be made before sending the notification to ensure no messages are missed
-    let mut receiver_notifications = notifications.subscribe();
-    let mut receiver_devices = devices.subscribe_device_changes();
+    let mut receiver_notifications = notification_manager.subscribe();
+    let mut receiver_devices = device_manager.subscribe_device_changes();
 
-    let notification_id: u32 = notify_action_device(notifications, update.name()).await?;
+    let notification_id: u32 = notify_action_device(notification_manager, device.name()).await?;
 
     // after a notification is sent, 1 of 3 things can happen:
     // 1. the user invokes an action of the notification
-    // 2. the notification expires or the user closes it
+    // 2. the notification expires/the user closes it without invoking an action
     // 3. the USB device associated with the notification is removed
 
     tokio::select! {
@@ -47,8 +49,8 @@ pub async fn ask_allow_device(
                 _ => panic!("this signal type shouldn't have reached this point"),
             }
         },
-        () = wait_removal(&mut receiver_devices, update.device_id()) => {
-            let _ = notifications.close(notification_id).await;
+        () = wait_removal(&mut receiver_devices, device.device_id()) => {
+            let _ = notification_manager.close(notification_id).await;
             info!("Device was removed, closing notification {}", notification_id);
             Err(anyhow!("device was removed while waiting for an action"))
         }
