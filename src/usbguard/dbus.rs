@@ -1,4 +1,4 @@
-use crate::usbguard::{Device, DeviceManager, DeviceTarget, DeviceUpdate};
+use crate::usbguard::{Device, DeviceManager, DeviceTarget, DeviceUpdate, ListDevicesFilter};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -13,6 +13,7 @@ const DBUS_OBJECT: &str = "/org/usbguard1/Devices";
 const DBUS_INTERFACE: &str = "org.usbguard.Devices1";
 const DBUS_INTERFACE_PRESENCE_CHANGED: &str = "DevicePresenceChanged";
 const DBUS_INTERFACE_APPLY_POLICY: &str = "applyDevicePolicy";
+const DBUS_INTERFACE_LIST_DEVICES: &str = "listDevices";
 
 const CHANNEL_LIMIT: usize = 64;
 
@@ -169,5 +170,28 @@ impl DeviceManager for DbusDeviceManager {
             .await
             .map(|_| ())
             .map_err(|err| err.into())
+    }
+
+    async fn list_devices(
+        &self,
+        filter: ListDevicesFilter,
+    ) -> anyhow::Result<impl Iterator<Item = Device>> {
+        let body: (&str,) = (filter.into(),);
+
+        let response = self
+            .connection
+            .call_method(
+                Some(DBUS_DESTINATION),
+                DBUS_OBJECT,
+                Some(DBUS_INTERFACE),
+                DBUS_INTERFACE_LIST_DEVICES,
+                &body,
+            )
+            .await
+            .map(|response| response.body().deserialize::<Vec<(u32, String)>>())??;
+
+        Ok(response
+            .into_iter()
+            .map(|value| Device::new(value.0, value.1)))
     }
 }

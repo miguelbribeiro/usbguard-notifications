@@ -25,6 +25,23 @@ impl From<u32> for DeviceEvent {
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
+pub enum ListDevicesFilter {
+    Allow,
+    Block,
+    None,
+}
+
+impl From<ListDevicesFilter> for &'static str {
+    fn from(value: ListDevicesFilter) -> Self {
+        match value {
+            ListDevicesFilter::Allow => "allow",
+            ListDevicesFilter::Block => "block",
+            ListDevicesFilter::None => "match",
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum DeviceTarget {
     Allow,
     Block,
@@ -127,4 +144,10 @@ pub trait DeviceManager: Send {
         device_id: u32,
         target: DeviceTarget,
     ) -> impl std::future::Future<Output = anyhow::Result<()>> + Send;
+
+    /// Gets a list of USB devices detected by USBGuard. A target filter can be optionally provided.
+    fn list_devices(
+        &self,
+        filter: ListDevicesFilter,
+    ) -> impl std::future::Future<Output = anyhow::Result<impl Iterator<Item = Device>>> + Send;
 }
