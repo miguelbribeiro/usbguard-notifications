@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use crate::ask::*;
+use crate::notifications::dbus::NotificationsDbus;
 use crate::notifications::NotificationManager;
 use crate::usbguard::dbus::DbusDeviceManager;
 use crate::usbguard::{DeviceEvent, DeviceManager, DeviceTarget, DeviceUpdate, ListDevicesFilter};
@@ -14,26 +15,21 @@ mod notifications;
 mod usbguard;
 
 pub async fn run() {
-    let notifications = notifications::dbus::NotificationsDbus::new().await.unwrap();
-    let notifications = Arc::new(notifications);
-    {
-        let notifications = notifications.clone();
-        tokio::spawn(async move {
-            notifications.watch().await.unwrap();
-        });
-    }
-
+    let notifications = initialize_notification_manager().await.unwrap();
     let devices = initialize_device_manager().await.unwrap();
 
     let mut receiver = devices.subscribe_device_changes();
     loop {
         let update = receiver.recv().await.unwrap();
+        let is_block_target = update
+            .device()
+            .target()
+            .map(|target| target == DeviceTarget::Block)
+            .unwrap_or(false);
 
         // only query user if the device was just inserted and its target is "block", otherwise
         // ignore this device
-        if update.event() == DeviceEvent::Insert
-            && update.device().target().unwrap_or(DeviceTarget::Allow) == DeviceTarget::Block
-        {
+        if update.event() == DeviceEvent::Insert && is_block_target {
             let device_manager = devices.clone();
             let notifications = notifications.clone();
 
@@ -44,6 +40,20 @@ pub async fn run() {
             });
         }
     }
+}
+
+async fn initialize_notification_manager() -> anyhow::Result<Arc<NotificationsDbus>> {
+    let notifications = NotificationsDbus::new().await.unwrap();
+    let notifications = Arc::new(notifications);
+
+    {
+        let notifications = notifications.clone();
+        tokio::spawn(async move {
+            notifications.watch().await.unwrap();
+        });
+    }
+
+    Ok(notifications)
 }
 
 async fn initialize_device_manager() -> anyhow::Result<Arc<DbusDeviceManager>> {
