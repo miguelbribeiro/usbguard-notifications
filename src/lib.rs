@@ -14,13 +14,13 @@ mod ask;
 mod notifications;
 mod usbguard;
 
-pub async fn run() {
-    let notifications = initialize_notification_manager().await.unwrap();
-    let devices = initialize_device_manager().await.unwrap();
+pub async fn run() -> anyhow::Result<()> {
+    let notifications = initialize_notification_manager().await?;
+    let devices = initialize_device_manager().await?;
 
     let mut receiver = devices.subscribe_device_changes();
     loop {
-        let update = receiver.recv().await.unwrap();
+        let update = receiver.recv().await?;
         let is_block_target = update
             .device()
             .target()
@@ -43,7 +43,7 @@ pub async fn run() {
 }
 
 async fn initialize_notification_manager() -> anyhow::Result<Arc<NotificationsDbus>> {
-    let notifications = NotificationsDbus::new().await.unwrap();
+    let notifications = NotificationsDbus::new().await?;
     let notifications = Arc::new(notifications);
 
     {
@@ -57,7 +57,7 @@ async fn initialize_notification_manager() -> anyhow::Result<Arc<NotificationsDb
 }
 
 async fn initialize_device_manager() -> anyhow::Result<Arc<DbusDeviceManager>> {
-    let device_manager = DbusDeviceManager::new().await.unwrap();
+    let device_manager = DbusDeviceManager::new().await?;
     let device_manager = Arc::new(device_manager);
 
     // only for checking if the dbus interface is available, the returned data isn't relevant

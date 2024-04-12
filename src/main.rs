@@ -1,18 +1,17 @@
+use anyhow::anyhow;
 use libc::{geteuid, getuid, uid_t};
-use std::process::ExitCode;
 use usbguard_notifications::run;
 
 #[tokio::main]
-async fn main() -> ExitCode {
+async fn main() -> anyhow::Result<()> {
     if is_root() {
-        eprintln!("this program should not be run as root");
-        return ExitCode::from(1);
+        return Err(anyhow!("this program should not be run as root"));
     }
 
     tracing_subscriber::fmt::init();
 
-    run().await;
-    unreachable!();
+    run().await?;
+    unreachable!()
 }
 
 fn is_root() -> bool {
