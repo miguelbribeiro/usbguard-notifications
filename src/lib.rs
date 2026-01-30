@@ -1,133 +1,136 @@
 #![allow(dead_code)]
 
 use crate::ask::*;
-use crate::notifications::dbus::NotificationsDbus;
 use crate::notifications::NotificationManager;
 use crate::usbguard::dbus::DbusDeviceManager;
-use crate::usbguard::{DeviceEvent, DeviceManager, DeviceTarget, DeviceUpdate, ListDevicesFilter};
-use anyhow::anyhow;
-use std::collections::HashMap;
+use crate::usbguard::{DeviceEvent, DeviceManager, DeviceTarget, DeviceUpdate};
 use std::sync::Arc;
-use tracing::{debug, error, instrument, warn};
+use std::time::Duration;
+use tokio::select;
+use tracing::{error, info};
 
 mod ask;
 mod notifications;
 mod usbguard;
 
 pub async fn run() -> anyhow::Result<()> {
-    let notifications = initialize_notification_manager().await?;
-    let devices = initialize_device_manager().await?;
+    let notifications = NotificationManager::new("").await?;
+    let devices: DbusDeviceManager = todo!();
 
-    let mut receiver = devices.subscribe_device_changes();
-    loop {
-        let update = receiver.recv().await?;
-        let is_block_target = update
-            .device()
-            .target()
-            .map(|target| target == DeviceTarget::Block)
-            .unwrap_or(false);
+    let app = App::new(notifications, devices);
+    app.run().await?;
+}
 
-        // only query user if the device was just inserted and its target is "block", otherwise
-        // ignore this device
-        if update.event() == DeviceEvent::Insert && is_block_target {
-            let device_manager = devices.clone();
-            let notifications = notifications.clone();
+// TODO merge into App
+struct AppInner {
+    notifications: NotificationManager,
+    devices: DbusDeviceManager,
+}
 
-            tokio::spawn(async move {
-                let _ =
-                    handle_blocked_device(notifications.as_ref(), device_manager.as_ref(), &update)
-                        .await;
-            });
+#[derive(Clone)]
+struct App {
+    inner: Arc<AppInner>,
+}
+
+impl App {
+    fn new(notifications: NotificationManager, devices: DbusDeviceManager) -> Self {
+        Self {
+            inner: Arc::new(AppInner {
+                notifications,
+                devices,
+            }),
         }
     }
-}
 
-async fn initialize_notification_manager() -> anyhow::Result<Arc<NotificationsDbus>> {
-    let notifications = NotificationsDbus::new().await?;
-    let notifications = Arc::new(notifications);
-
-    {
-        let notifications = notifications.clone();
-        tokio::spawn(async move {
-            notifications.watch().await.unwrap();
-        });
-    }
-
-    Ok(notifications)
-}
-
-async fn initialize_device_manager() -> anyhow::Result<Arc<DbusDeviceManager>> {
-    let device_manager = DbusDeviceManager::new().await?;
-    let device_manager = Arc::new(device_manager);
-
-    // only for checking if the dbus interface is available, the returned data isn't relevant
-    if let Err(error) = device_manager.list_devices(ListDevicesFilter::None).await {
-        return Err(anyhow!("failed to access USBGuard dbus service: {}", error));
-    }
-
-    // initialize signal listener
-    {
-        let devices = device_manager.clone();
-        tokio::spawn(async move {
-            devices.watch_device_changes().await.unwrap();
-        });
-    }
-
-    Ok(device_manager)
-}
-
-/// Handles a device by prompting the user and applying the new target if allowed.
-#[instrument(skip(notification_manager, device_manager))]
-async fn handle_blocked_device(
-    notification_manager: &impl NotificationManager,
-    device_manager: &impl DeviceManager,
-    update: &DeviceUpdate,
-) -> anyhow::Result<()> {
-    let allow =
-        match prompt_user_or_wait_removal(notification_manager, device_manager, update).await {
-            Ok(target) => target,
-            Err(error) => {
-                match error.downcast_ref::<TimeoutError>() {
-                    Some(_) => {
-                        debug!("Time limit for receiving an action from the user has been exceeded")
-                    }
-                    None => warn!(
-                        "Error while sending notification or getting its action back: {}",
-                        &error
-                    ),
-                };
-
-                return Err(error);
-            }
-        };
-
-    debug!("Notification result: should allow: {}", allow);
-
-    if allow {
-        let result = device_manager
+    async fn try_allow_device(&self, update: &DeviceUpdate) {
+        let allow_result = self
+            .inner
+            .devices
             .apply_device_target(update.device().device_id(), DeviceTarget::Allow)
-            .await
-            .inspect_err(|error| error!("Couldn't apply new target to device: {}", error));
+            .await;
 
-        if let Err(error) = result {
-            let body = format!(
+        if let Err(err) = allow_result {
+            error!(
+                "failed to apply target to device {}: {}",
+                update.name(),
+                err
+            );
+
+            let error_notification_body = format!(
                 "Failed to apply target to device \"{}\", check the logs for more information",
                 update.name()
             );
-
-            let _ = notification_manager
-                .notify(
-                    "Failed to apply target",
-                    &body,
-                    &[],
-                    &HashMap::default(),
-                    None,
-                )
+            let error_notification = self
+                .inner
+                .notifications
+                .notify("Failed to allow device", &error_notification_body)
                 .await;
-
-            return Err(error);
+            if let Err(error) = error_notification {
+                error!("failed to send error notification: {}", error);
+            }
         }
     }
 
-    Ok(())
+    async fn handle_blocked_device(&self, update: &DeviceUpdate) {
+        let (decision_cancel_sender, decicion_cancel_receiver) = tokio::sync::oneshot::channel();
+        let mut decision = std::pin::pin!(ask(
+            &self.inner.notifications,
+            update,
+            decicion_cancel_receiver
+        ));
+
+        let decision_result = select! {
+            result = &mut decision => {
+                match result {
+                    Ok(decision) => match decision {
+                        notifications::DecisionResult::Decision(decision) => decision,
+                        notifications::DecisionResult::Closed => AllowIgnoreQuestion::Ignore,
+                    },
+                    Err(_) => todo!(),
+                }
+            }
+            // TODO
+            _ = tokio::time::sleep(Duration::from_secs(1)) => {
+                decision_cancel_sender.send(()).expect("channel should be open");
+
+                // this should finish almost immediately after cancelling it
+                if let Err(err) = decision.await {
+                    error!("failed to close notification: {}", err);
+                }
+
+                return;
+            }
+        };
+
+        match decision_result {
+            AllowIgnoreQuestion::Allow => {
+                self.try_allow_device(update).await;
+            }
+            AllowIgnoreQuestion::Ignore => {
+                info!("ignoring device");
+            }
+        };
+    }
+
+    async fn run(&self) -> anyhow::Result<()> {
+        let mut receiver = self.inner.devices.subscribe_device_changes();
+
+        loop {
+            let update = receiver.recv().await?;
+            let is_block_target = update
+                .device()
+                .target()
+                .map(|target| target == DeviceTarget::Block)
+                .unwrap_or(false);
+
+            // only query user if the device was just inserted and its current target is "block"
+            if update.event() == DeviceEvent::Insert && is_block_target {
+                let app = self.clone();
+
+                tokio::spawn(async move {
+                    let _ = app.handle_blocked_device(&update).await;
+                });
+            }
+        }
+    }
 }
