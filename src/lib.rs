@@ -2,8 +2,6 @@
 
 use crate::ask::*;
 use crate::notifications::NotificationManager;
-use crate::usbguard::dbus::DbusDeviceManager;
-use crate::usbguard::{DeviceEvent, DeviceManager, DeviceTarget, DeviceUpdate};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::select;
