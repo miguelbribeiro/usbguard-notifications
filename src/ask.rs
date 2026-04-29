@@ -31,7 +31,8 @@ pub async fn ask<'a>(
     update: &DeviceUpdate,
     cancel: tokio::sync::oneshot::Receiver<()>,
 ) -> anyhow::Result<DecisionResult<AllowIgnoreQuestion>> {
-    let prompt_body = format!("Allow device \"{}\"?", update.name());
+    let name = update.name.as_deref();
+    let prompt_body = format!("Allow device \"{}\"?", name.unwrap_or("(unknown)"));
 
     Ok(notification_manager
         .decision::<AllowIgnoreQuestion>("Blocked device detected", &prompt_body, cancel)
