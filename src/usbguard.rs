@@ -98,9 +98,9 @@ impl TryFrom<DevicePresenceChangedArgs<'_>> for DeviceUpdate {
     gen_blocking = false
 )]
 trait Devices {
+    #[zbus(name = "applyDevicePolicy")]
     fn apply_device_policy(&self, id: u32, target: u32, permanent: bool) -> zbus::Result<u32>;
 
-    /// DevicePresenceChanged signal
     #[zbus(signal)]
     fn device_presence_changed(
         &self,
