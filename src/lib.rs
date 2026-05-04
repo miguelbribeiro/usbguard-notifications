@@ -1,133 +1,151 @@
 #![allow(dead_code)]
 
-use crate::ask::*;
-use crate::notifications::dbus::NotificationsDbus;
 use crate::notifications::NotificationManager;
-use crate::usbguard::dbus::DbusDeviceManager;
-use crate::usbguard::{DeviceEvent, DeviceManager, DeviceTarget, DeviceUpdate, ListDevicesFilter};
-use anyhow::anyhow;
-use std::collections::HashMap;
-use std::sync::Arc;
-use tracing::{debug, error, instrument, warn};
+use crate::usbguard::{DeviceEvent, DeviceId, DeviceTarget, DeviceUpdate};
+use crate::{ask::*, usbguard::DeviceManager};
+use tokio::select;
+use tokio_stream::StreamExt;
+use tracing::{error, info};
 
 mod ask;
 mod notifications;
 mod usbguard;
 
 pub async fn run() -> anyhow::Result<()> {
-    let notifications = initialize_notification_manager().await?;
-    let devices = initialize_device_manager().await?;
+    let notifications = NotificationManager::new("usbguard-notifications").await?;
+    let device_manager = DeviceManager::new().await?;
 
-    let mut receiver = devices.subscribe_device_changes();
-    loop {
-        let update = receiver.recv().await?;
-        let is_block_target = update
-            .device()
-            .target()
-            .map(|target| target == DeviceTarget::Block)
-            .unwrap_or(false);
+    if !notifications.has_capability_actions().await? {
+        let _ = notifications
+            .notify(
+                "Failed to start",
+                "This notification server does not support actions.",
+            )
+            .await?;
 
-        // only query user if the device was just inserted and its target is "block", otherwise
-        // ignore this device
-        if update.event() == DeviceEvent::Insert && is_block_target {
-            let device_manager = devices.clone();
-            let notifications = notifications.clone();
+        return Err(anyhow::anyhow!("notification server does not support actions"));
+    }
 
-            tokio::spawn(async move {
-                let _ =
-                    handle_blocked_device(notifications.as_ref(), device_manager.as_ref(), &update)
-                        .await;
-            });
+    let app = App::new(notifications, device_manager);
+    app.run().await?;
+
+    unreachable!();
+}
+
+struct App {
+    notifications: NotificationManager,
+    devices: DeviceManager,
+}
+
+impl App {
+    fn new(notifications: NotificationManager, devices: DeviceManager) -> Self {
+        Self {
+            notifications,
+            devices,
         }
     }
-}
 
-async fn initialize_notification_manager() -> anyhow::Result<Arc<NotificationsDbus>> {
-    let notifications = NotificationsDbus::new().await?;
-    let notifications = Arc::new(notifications);
+    async fn try_allow_device(&self, update: &DeviceUpdate) {
+        let allow_result = self
+            .devices
+            .apply_device_policy(update.id, DeviceTarget::Allow)
+            .await;
 
-    {
-        let notifications = notifications.clone();
-        tokio::spawn(async move {
-            notifications.watch().await.unwrap();
-        });
+        if let Err(err) = allow_result {
+            let device_name = update.name.as_deref().unwrap_or("(unknown)");
+            error!("failed to apply target to device {}: {}", device_name, err);
+
+            let error_notification_body = format!(
+                "Failed to apply target to device \"{}\", check the logs for more information",
+                device_name
+            );
+            let error_notification = self
+                .notifications
+                .notify("Failed to allow device", &error_notification_body)
+                .await;
+            if let Err(error) = error_notification {
+                error!("failed to send error notification: {}", error);
+            }
+        }
     }
 
-    Ok(notifications)
-}
-
-async fn initialize_device_manager() -> anyhow::Result<Arc<DbusDeviceManager>> {
-    let device_manager = DbusDeviceManager::new().await?;
-    let device_manager = Arc::new(device_manager);
-
-    // only for checking if the dbus interface is available, the returned data isn't relevant
-    if let Err(error) = device_manager.list_devices(ListDevicesFilter::None).await {
-        return Err(anyhow!("failed to access USBGuard dbus service: {}", error));
+    async fn get_device_update_stream_wrapper(
+        &self,
+    ) -> anyhow::Result<impl futures::Stream<Item = DeviceUpdate>> {
+        Ok(self
+            .devices
+            .get_device_update_stream()
+            .await?
+            .filter_map(|u| match u {
+                Ok(u) => Some(u),
+                Err(e) => {
+                    error!("failed to parse device event: {}", e);
+                    None
+                }
+            }))
     }
 
-    // initialize signal listener
-    {
-        let devices = device_manager.clone();
-        tokio::spawn(async move {
-            devices.watch_device_changes().await.unwrap();
-        });
+    async fn wait_device_removal(&self, device_id: DeviceId) -> anyhow::Result<()> {
+        let mut device_stream = self.get_device_update_stream_wrapper().await?;
+
+        while let Some(update) = device_stream.next().await {
+            if update.id == device_id && update.event == DeviceEvent::Remove {
+                break;
+            }
+        }
+
+        Ok(())
     }
 
-    Ok(device_manager)
-}
+    async fn handle_blocked_device(&self, update: &DeviceUpdate) -> anyhow::Result<()> {
+        let (decision_cancel_sender, decicion_cancel_receiver) = tokio::sync::oneshot::channel();
+        let mut decision =
+            std::pin::pin!(ask(&self.notifications, update, decicion_cancel_receiver));
 
-/// Handles a device by prompting the user and applying the new target if allowed.
-#[instrument(skip(notification_manager, device_manager))]
-async fn handle_blocked_device(
-    notification_manager: &impl NotificationManager,
-    device_manager: &impl DeviceManager,
-    update: &DeviceUpdate,
-) -> anyhow::Result<()> {
-    let allow =
-        match prompt_user_or_wait_removal(notification_manager, device_manager, update).await {
-            Ok(target) => target,
-            Err(error) => {
-                match error.downcast_ref::<TimeoutError>() {
-                    Some(_) => {
-                        debug!("Time limit for receiving an action from the user has been exceeded")
-                    }
-                    None => warn!(
-                        "Error while sending notification or getting its action back: {}",
-                        &error
-                    ),
-                };
+        let decision_result = select! {
+            result = &mut decision => {
+                match result {
+                    Ok(decision) => match decision {
+                        notifications::DecisionResult::Decision(decision) => decision,
+                        notifications::DecisionResult::Closed => AllowIgnoreQuestion::Ignore,
+                    },
+                    Err(_) => todo!(),
+                }
+            }
+            result = self.wait_device_removal(update.id) => {
+                decision_cancel_sender.send(()).expect("channel should be open");
 
-                return Err(error);
+                // this should finish almost immediately after cancelling it
+                decision.await?;
+
+                return result;
             }
         };
 
-    debug!("Notification result: should allow: {}", allow);
+        match decision_result {
+            AllowIgnoreQuestion::Allow => {
+                self.try_allow_device(update).await;
+            }
+            AllowIgnoreQuestion::Ignore => {
+                info!("ignoring device");
+            }
+        };
 
-    if allow {
-        let result = device_manager
-            .apply_device_target(update.device().device_id(), DeviceTarget::Allow)
-            .await
-            .inspect_err(|error| error!("Couldn't apply new target to device: {}", error));
-
-        if let Err(error) = result {
-            let body = format!(
-                "Failed to apply target to device \"{}\", check the logs for more information",
-                update.name()
-            );
-
-            let _ = notification_manager
-                .notify(
-                    "Failed to apply target",
-                    &body,
-                    &[],
-                    &HashMap::default(),
-                    None,
-                )
-                .await;
-
-            return Err(error);
-        }
+        Ok(())
     }
 
-    Ok(())
+    async fn run(&self) -> anyhow::Result<()> {
+        let mut device_stream = self.get_device_update_stream_wrapper().await?;
+
+        while let Some(update) = device_stream.next().await {
+            // only query user if the device was just inserted and its current target is "block"
+            if update.event == DeviceEvent::Insert && update.target == DeviceTarget::Block {
+                if let Err(e) = self.handle_blocked_device(&update).await {
+                    error!("failed to handle blocked device: {}", e);
+                };
+            }
+        }
+
+        unreachable!();
+    }
 }
