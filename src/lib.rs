@@ -12,8 +12,19 @@ mod notifications;
 mod usbguard;
 
 pub async fn run() -> anyhow::Result<()> {
-    let notifications = NotificationManager::new("").await?;
+    let notifications = NotificationManager::new("usbguard-notifications").await?;
     let device_manager = DeviceManager::new().await?;
+
+    if !notifications.has_capability_actions().await? {
+        let _ = notifications
+            .notify(
+                "Failed to start",
+                "This notification server does not support actions.",
+            )
+            .await?;
+
+        return Err(anyhow::anyhow!("notification server does not support actions"));
+    }
 
     let app = App::new(notifications, device_manager);
     app.run().await?;

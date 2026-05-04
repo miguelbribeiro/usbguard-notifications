@@ -31,6 +31,8 @@ trait Notifications {
 
     fn close_notification(&self, id: u32) -> zbus::Result<()>;
 
+    fn get_capabilities(&self) -> zbus::Result<Vec<String>>;
+
     #[zbus(signal)]
     fn action_invoked(&self, notification_id: u32, action: String) -> zbus::Result<()>;
 
@@ -71,6 +73,11 @@ impl NotificationManager {
             proxy,
             app_name: Arc::new(app_name.to_string()),
         })
+    }
+
+    pub async fn has_capability_actions(&self) -> zbus::Result<bool> {
+        let capabilities = self.proxy.get_capabilities().await?;
+        Ok(capabilities.iter().any(|s| s == "actions"))
     }
 
     async fn notify_internal(
