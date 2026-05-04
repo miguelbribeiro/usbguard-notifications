@@ -5,7 +5,7 @@ use crate::usbguard::{DeviceEvent, DeviceId, DeviceTarget, DeviceUpdate};
 use crate::{ask::*, usbguard::DeviceManager};
 use tokio::select;
 use tokio_stream::StreamExt;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 mod ask;
 mod notifications;
@@ -125,9 +125,10 @@ impl App {
         match decision_result {
             AllowIgnoreQuestion::Allow => {
                 self.try_allow_device(update).await;
+                info!("allowed device {:?}", update.id);
             }
             AllowIgnoreQuestion::Ignore => {
-                info!("ignoring device");
+                info!("ignoring device {:?}", update.id);
             }
         };
 
@@ -137,9 +138,12 @@ impl App {
     async fn run(&self) -> anyhow::Result<()> {
         let mut device_stream = self.get_device_update_stream_wrapper().await?;
 
+        debug!("waiting for blocked devices");
         while let Some(update) = device_stream.next().await {
             // only query user if the device was just inserted and its current target is "block"
             if update.event == DeviceEvent::Insert && update.target == DeviceTarget::Block {
+                debug!("detected blocked device {:?}", update.id);
+
                 if let Err(e) = self.handle_blocked_device(&update).await {
                     error!("failed to handle blocked device: {}", e);
                 };

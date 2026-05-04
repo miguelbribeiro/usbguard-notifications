@@ -5,6 +5,7 @@ use std::fmt::Display;
 use std::sync::Arc;
 
 use anyhow::anyhow;
+use tracing::debug;
 use zbus::export::futures_util::StreamExt;
 use zbus::Connection;
 
@@ -153,12 +154,16 @@ impl NotificationManager {
             .notify_internal(summary, body, Some(action_mapping_raw.as_slice()))
             .await?;
 
+        debug!("notification sent with id {}, waiting for action", notification_id);
+
         loop {
             tokio::select! {
                 message = stream_action_invoked.next() => {
                     if let Some(message) = message {
                         let args = message.args()?;
                         if args.notification_id == notification_id {
+                            debug!("action {} invoked for notification {}", args.action, notification_id);
+
                             return Ok(action_mapping
                                 .remove(&args.action)
                                 .ok_or_else(|| anyhow!("returned action is unknown"))
@@ -171,7 +176,8 @@ impl NotificationManager {
                 message = stream_notification_closed.next() => {
                     if let Some(message) = message {
                         let args = message.args()?;
-                        if args.notification_id == notification_id{
+                        if args.notification_id == notification_id {
+                            debug!("notification {} closed", notification_id);
                             return Ok(DecisionResult::Closed);
                         }
                     } else {
@@ -179,6 +185,7 @@ impl NotificationManager {
                     }
                 }
                 _ = &mut cancel => {
+                    debug!("cancel received, closing notification {}", notification_id);
                     self.close(NotificationId(notification_id)).await?;
                     return Ok(DecisionResult::Closed);
                 }
