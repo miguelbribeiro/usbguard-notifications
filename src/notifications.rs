@@ -2,7 +2,6 @@
 
 use std::collections::HashMap;
 use std::fmt::Display;
-use std::sync::Arc;
 
 use anyhow::anyhow;
 use tracing::debug;
@@ -59,10 +58,9 @@ struct NotificationAction<R> {
     value: R,
 }
 
-#[derive(Clone)]
 pub struct NotificationManager {
     proxy: NotificationsProxy<'static>,
-    app_name: Arc<String>, // TODO don't use arc
+    app_name: String,
 }
 
 impl NotificationManager {
@@ -72,7 +70,7 @@ impl NotificationManager {
 
         Ok(Self {
             proxy,
-            app_name: Arc::new(app_name.to_string()),
+            app_name: app_name.to_string(),
         })
     }
 
@@ -138,17 +136,17 @@ impl NotificationManager {
             })
             .collect();
 
-        // TODO move this to the method
+        let (mut stream_action_invoked, mut stream_notification_closed) = tokio::try_join!(
+            self.proxy.receive_action_invoked(),
+            self.proxy.receive_notification_closed(),
+        )?;
+
+        // flat sequence of str references for the notification
         let action_mapping_raw: Vec<&str> = action_mapping
             .iter()
             .map(|(id, action)| [id.as_str(), action.display.as_str()])
             .flatten()
             .collect();
-
-        let (mut stream_action_invoked, mut stream_notification_closed) = tokio::try_join!(
-            self.proxy.receive_action_invoked(),
-            self.proxy.receive_notification_closed(),
-        )?;
 
         let notification_id = self
             .notify_internal(summary, body, Some(action_mapping_raw.as_slice()))
